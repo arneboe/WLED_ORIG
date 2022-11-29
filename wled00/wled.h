@@ -179,7 +179,6 @@ using PSRAMDynamicJsonDocument = BasicJsonDocument<PSRAM_Allocator>;
   #error WLED_AP_PASS is defined but WLED_AP_SSID is still the default. \
          Please change WLED_AP_SSID to something unique.
 #endif
-
 #ifndef WLED_AP_SSID
   #define WLED_AP_SSID DEFAULT_AP_SSID
 #endif

@@ -343,6 +343,7 @@ void WLED::setup()
   pinManager.allocatePin(2, true, PinOwner::DMX);
 #endif
 
+
   DEBUG_PRINTLN(F("Registering usermods ..."));
   registerUsermods();
 
