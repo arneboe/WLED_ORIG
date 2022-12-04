@@ -6,6 +6,7 @@
 #include "esp_rdm_client.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <atomic>
 
 void startAddressChangedCb(uint16_t newAddr);
 void dmxTask(void *instance);
@@ -19,7 +20,8 @@ class RdmDmx : public Usermod
 
 public:
     int dmxAddr;
-    int newDmxAddr;
+    std::atomic<int> newDmxAddr;
+    std::atomic<bool> identify = false;
     uint8_t dmxData[13] = {0}; // FIXME hardcoded 13
 
     void setup()
@@ -62,26 +64,45 @@ public:
 
     void updateEffect()
     {
-        if (bri != dmxData[0])
+        if (identify)
         {
-            bri = dmxData[0];
+            bri = 255;
+            effectCurrent = 0;
+            effectPalette = 0;
+            col[0] = 255;
+            col[1] = 255;
+            col[2] = 255;
+            col[3] = 255;
+            colSec[0] = 255;
+            colSec[1] = 255;
+            colSec[2] = 255;
+            colSec[3] = 255;
+            transitionDelayTemp = 0;
+            colorUpdated(CALL_MODE_NOTIFICATION);
         }
-        if (dmxData[1] < strip.getModeCount())
-            effectCurrent = dmxData[1];
-        effectSpeed = dmxData[2]; // flickers
-        effectIntensity = dmxData[3];
-        effectPalette = dmxData[4];
-        col[0] = dmxData[5];
-        col[1] = dmxData[6];
-        col[2] = dmxData[7];
-        colSec[0] = dmxData[8];
-        colSec[1] = dmxData[9];
-        colSec[2] = dmxData[10];
+        else
+        {
+            if (bri != dmxData[0])
+            {
+                bri = dmxData[0];
+            }
+            if (dmxData[1] < strip.getModeCount())
+                effectCurrent = dmxData[1];
+            effectSpeed = dmxData[2]; 
+            effectIntensity = dmxData[3];
+            effectPalette = dmxData[4];
+            col[0] = dmxData[5];
+            col[1] = dmxData[6];
+            col[2] = dmxData[7];
+            colSec[0] = dmxData[8];
+            colSec[1] = dmxData[9];
+            colSec[2] = dmxData[10];
 
-        col[3] = dmxData[11]; // white
-        colSec[3] = dmxData[12];
-        transitionDelayTemp = 0;              // act fast
-        colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
+            col[3] = dmxData[11]; // white
+            colSec[3] = dmxData[12];
+            transitionDelayTemp = 0;              // act fast
+            colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
+        }
     }
 
     void addToConfig(JsonObject &root)
@@ -97,6 +118,11 @@ public:
             // storing needs to happen in next loop
             newDmxAddr = newAddr;
         }
+    }
+
+    void setIdentify(bool _identify)
+    {
+        identify = _identify;
     }
 
     bool readFromConfig(JsonObject &root)
@@ -127,6 +153,8 @@ void dmxTask(void *)
     rdm_client_init(DMX_NUM_2, rdmDmx->dmxAddr, 13, "LICHTAUSGANG Blinder");
     rdm_client_set_start_address_changed_cb(DMX_NUM_2, [](uint16_t newAddr)
                                             { rdmDmx->updateDmxAddr(newAddr); });
+    rdm_client_set_notify_cb(DMX_NUM_2, [](bool identify)
+                             { rdmDmx->setIdentify(identify); });
 
     while (true)
     {
@@ -144,7 +172,7 @@ void dmxTask(void *)
                 }
                 else
                 {
-                    //FIXME only read part of the buffer directly into rdmDmx?!
+                    // FIXME only read part of the buffer directly into rdmDmx?!
                     rdmDmx->newDmxData(data);
                 }
             }
