@@ -18,17 +18,19 @@ struct DmxTaskParams
     uint16_t numPixels;
     std::string defaultPersonalityName;
     uint16_t defaultPersonalityFootprint;
-    std::atomic<uint8_t> personality = 0;
-
-} dmxParams; // This is global because the esp_dmx api uses c-callbacks and I cannot capture state in the callback lambdas
+    bool threadRunning = false; // is true when the dmx thread is running
+} dmxParams;                    // This is global because the esp_dmx api uses c-callbacks and I cannot capture state in the callback lambdas
 
 class RdmDmx : public Usermod
 {
 
 public:
+
     int dmxAddr;
-    std::atomic<int> newDmxAddr;
+    std::atomic<int> dmxAddrByRdm;
+    int dmxAddrByConfig;
     std::atomic<bool> identify = false;
+    TaskHandle_t dmxTaskHandle;
 
     /** personality:
      *  0 = wled fixture
@@ -37,18 +39,29 @@ public:
      *  3 = pixel mapping 3 pixels grouped
      *  etc..
      */
-    uint8_t dmxData[13] = {0}; // FIXME hardcoded 13
+    uint16_t personality;
+    uint16_t personalityByConfig;
+    std::atomic<uint8_t> personalityByRdm = 0;
+
+    uint8_t dmxData[513] = {0};
 
     void setup()
     {
 
         // FIXME use correct upper bound
-        if (dmxAddr < 1 || dmxAddr > 512)
+        //       should also work in pixel mode
+        //       and also check this every time the addr changed
+        //       or the personality changed
+        if (dmxAddrByConfig < 1 || dmxAddrByConfig > 512)
         {
-            dmxAddr = 1;
+            dmxAddrByConfig = 1;
             ESP_LOGE("RdmDmx", "dmx address out of bounds. Resetting to 1");
         }
-        newDmxAddr = dmxAddr;
+        dmxAddr = dmxAddrByConfig;
+        dmxAddrByRdm = dmxAddrByConfig;
+
+        personality = personalityByConfig;
+        personalityByRdm = personalityByConfig;
 
         dmxParams.rdmDmx = this;
         dmxParams.numPixels = strip.getLengthTotal();
@@ -56,7 +69,7 @@ public:
         dmxParams.defaultPersonalityName = "WLED Mode";
         dmxParams.defaultPersonalityFootprint = 13;
 
-        TaskHandle_t dmxTaskHandle = NULL;
+        dmxTaskHandle = NULL;
 
         // pin to core 0 because wled is running on core 1
         xTaskCreatePinnedToCore(dmxTask, "DMX_TASK", 10240, nullptr, 2, &dmxTaskHandle, 0);
@@ -68,11 +81,40 @@ public:
 
     void loop()
     {
-        // update saved dmx addr
-        if (newDmxAddr != dmxAddr)
+        if (dmxAddrByRdm != dmxAddr)
         {
-            dmxAddr = newDmxAddr;
+            dmxAddr = dmxAddrByRdm;
+            dmxAddrByConfig = dmxAddrByRdm;
             serializeConfig();
+        }
+        
+        if(dmxAddrByConfig != dmxAddr)
+        {
+            dmxAddr = dmxAddrByConfig;
+            dmxAddrByRdm = dmxAddrByConfig;
+            if (dmxParams.threadRunning)
+            {
+                rdm_client_set_start_address(DMX_NUM_2, dmxAddr);
+            }
+        }
+
+        // web interface changed personality, update rdm
+        if (personality != personalityByConfig)
+        {
+            personality = personalityByConfig;
+            personalityByRdm = personalityByConfig;
+            if (dmxParams.threadRunning)
+            {
+                rdm_client_set_personality(DMX_NUM_2, personality + 1); //+1 because rmd is 1-based
+            }
+        }
+
+        // rdm changed personality, update web interface
+        if (personalityByRdm != personality)
+        {
+            personality = personalityByRdm;
+            personalityByConfig = personalityByRdm;
+            serializeConfig();                                                                                    
         }
 
         dmxParams.numPixels = strip.getLengthTotal();
@@ -86,19 +128,13 @@ public:
         updateEffect();
     }
 
-    void newDmxData(uint8_t *data)
+    // notify that new data has been received
+    void newDmxData()
     {
-        // FIXME race conditions etc.
-        memcpy(dmxData, data + dmxAddr, 13); // FIXME harcoded 13
     }
 
     void updateEffect()
     {
-
-        // setPixelColor
-        // show
-        //  auf strip
-
         if (identify)
         {
             bri = 255;
@@ -115,36 +151,76 @@ public:
             transitionDelayTemp = 0;
             colorUpdated(CALL_MODE_NOTIFICATION);
         }
-        else
+        else if (personality == 0) // WLED effect mode
         {
-            if (bri != dmxData[0])
-            {
-                bri = dmxData[0];
-            }
-            if (dmxData[1] < strip.getModeCount())
-                effectCurrent = dmxData[1];
-            effectSpeed = dmxData[2];
-            effectIntensity = dmxData[3];
-            effectPalette = dmxData[4];
-            col[0] = dmxData[5];
-            col[1] = dmxData[6];
-            col[2] = dmxData[7];
-            colSec[0] = dmxData[8];
-            colSec[1] = dmxData[9];
-            colSec[2] = dmxData[10];
+            const uint16_t addr = std::min(500, dmxAddr);
+            const uint8_t *data = &dmxData[addr];
 
-            col[3] = dmxData[11]; // white
-            colSec[3] = dmxData[12];
+            realtimeMode = REALTIME_MODE_INACTIVE;
+            if (bri != data[0])
+            {
+                bri = data[0];
+            }
+            if (data[1] < strip.getModeCount())
+                effectCurrent = data[1];
+            effectSpeed = data[2];
+            effectIntensity = data[3];
+            effectPalette = data[4];
+            col[0] = data[5];
+            col[1] = data[6];
+            col[2] = data[7];
+            colSec[0] = data[8];
+            colSec[1] = data[9];
+            colSec[2] = data[10];
+
+            col[3] = data[11]; // white
+            colSec[3] = data[12];
             transitionDelayTemp = 0;              // act fast
             colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
+        }
+    }
+
+    void handleOverlayDraw() override
+    {
+        if(personality != 0) // pixel mapping mode
+        {
+            realtimeLock(realtimeTimeoutMs, REALTIME_MODE_E131);
+            if (realtimeOverride && !(realtimeMode && useMainSegmentOnly))
+                return;
+
+            // FIXMe implement getFootprint instead
+            const uint8_t groupPixels = personality;
+            // const uint16_t numPixelsGrouped = (dmxParams.numPixels + groupPixels - 1) / groupPixels; // integer math ceil
+            // const uint16_t footprint = numPixelsGrouped * 3;
+
+            const uint16_t numPixels = strip.getLengthTotal();
+            uint16_t addr = dmxAddr;
+            uint8_t currentGrpPixel = 1;
+
+            for (uint16_t i = 0; i < numPixels; ++i)
+            {
+                setRealtimePixel(i, dmxData[addr], dmxData[addr + 1], dmxData[addr + 2], 0);
+                currentGrpPixel++;
+
+                if (currentGrpPixel > groupPixels)
+                {
+                    addr += 3;
+                    currentGrpPixel = 1;
+                    if (addr > 510)
+                    { // FIXME calculate beforehand
+                        break;
+                    }
+                }
+            }
+            e131NewData = true;
         }
     }
 
     void addToConfig(JsonObject &root)
     {
         JsonObject top = root.createNestedObject("dmx_rdm_mod");
-        top["dmx_addr"] = dmxAddr;
-        top["personality"] = dmxParams.personality.load();
+        top["dmx_addr"] = dmxAddrByConfig;
+        top["personality"] = personalityByConfig;
     }
 
     void updateDmxAddr(uint16_t newAddr)
@@ -152,7 +228,7 @@ public:
         if (newAddr > 0 && newAddr <= 512)
         {
             // storing needs to happen in next loop
-            newDmxAddr = newAddr;
+            dmxAddrByRdm = newAddr;
         }
     }
 
@@ -165,11 +241,9 @@ public:
     {
         JsonObject top = root["dmx_rdm_mod"];
         bool configComplete = !top.isNull();
-        configComplete &= getJsonValue(top["dmx_addr"], dmxAddr, 42);
-        uint8_t person = 0;
-        configComplete &= getJsonValue(top["personality"], person, 0);
-        dmxParams.personality = person;
-        rdm_client_set_personality(DMX_NUM_2, person + 1); //+1 because rmd is 1-based
+        configComplete &= getJsonValue(top["dmx_addr"], dmxAddrByConfig, 42);
+        configComplete &= getJsonValue(top["personality"], personalityByConfig, 0);
+
         return configComplete;
     }
 
@@ -179,11 +253,10 @@ public:
     }
 
     // callback coming from rdm client
-    void personalityChanged(uint8_t newPersonality)
+    void personalityChanged(uint8_t p)
     {
         // rmd personalities are 1-based but we are 0-based
-        dmxParams.personality = newPersonality - 1;
-        serializeConfig();
+        personalityByRdm = p - 1;
     }
 };
 
@@ -203,7 +276,7 @@ void initPersonalities()
         rdm_client_add_personality(DMX_NUM_2, footprint, ("Pixmap (grp " + std::to_string(divisor) + ")").c_str());
     }
 
-    rdm_client_set_personality(DMX_NUM_2, dmxParams.personality + 1); //+1 because rmd is 1-based
+    rdm_client_set_personality(DMX_NUM_2, dmxParams.rdmDmx->personality + 1); //+1 because rmd is 1-based
 
     rdm_client_set_personality_changed_cb(DMX_NUM_2, [](uint8_t personality)
                                           { dmxParams.rdmDmx->personalityChanged(personality); });
@@ -227,7 +300,7 @@ void dmxTask(void *)
                              { dmxParams.rdmDmx->setIdentify(identify); });
 
     initPersonalities();
-
+    dmxParams.threadRunning = true;
     while (true)
     {
         dmx_packet_t dmxPacket;
@@ -237,15 +310,17 @@ void dmxTask(void *)
         {
             if (dmxPacket.err == ESP_OK)
             {
-                dmx_read(DMX_NUM_2, data, dmxPacket.size);
                 if (dmxPacket.is_rdm)
                 {
+                    dmx_read(DMX_NUM_2, data, dmxPacket.size);
                     rdm_client_handle_rdm_message(DMX_NUM_2, &dmxPacket, data, dmxPacket.size);
                 }
                 else
                 {
                     // FIXME only read part of the buffer directly into rdmDmx?!
-                    dmxParams.rdmDmx->newDmxData(data);
+                    dmx_read(DMX_NUM_2, dmxParams.rdmDmx->dmxData, dmxPacket.size);
+                    // TODO replace with some kind of thread signal feature
+                    dmxParams.rdmDmx->newDmxData();
                 }
             }
             else
