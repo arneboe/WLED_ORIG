@@ -9,8 +9,11 @@
 #include <atomic>
 
 void startAddressChangedCb(uint16_t newAddr);
-void dmxTask(void *instance);
+void dmxReceiverTask(void *instance);
+void IRAM_ATTR dmxSendTask(void *instance);
 class RdmDmx;
+
+
 
 struct DmxTaskParams
 {
@@ -25,12 +28,12 @@ class RdmDmx : public Usermod
 {
 
 public:
-
     int dmxAddr;
     std::atomic<int> dmxAddrByRdm;
     int dmxAddrByConfig;
     std::atomic<bool> identify = false;
-    TaskHandle_t dmxTaskHandle;
+    TaskHandle_t dmxRcvTaskHandle;
+    TaskHandle_t dmxSendTaskHandle;
 
     /** personality:
      *  0 = wled fixture
@@ -69,13 +72,20 @@ public:
         dmxParams.defaultPersonalityName = "WLED Mode";
         dmxParams.defaultPersonalityFootprint = 13;
 
-        dmxTaskHandle = NULL;
+        dmxRcvTaskHandle = NULL;
 
         // pin to core 0 because wled is running on core 1
-        xTaskCreatePinnedToCore(dmxTask, "DMX_TASK", 10240, nullptr, 2, &dmxTaskHandle, 0);
-        if (!dmxTaskHandle)
+        xTaskCreatePinnedToCore(dmxReceiverTask, "DMX_RCV_TASK", 10240, nullptr, 2, &dmxRcvTaskHandle, 0);
+        if (!dmxRcvTaskHandle)
         {
-            ESP_LOGE("RdmDmx", "Failed to create dmx task");
+            ESP_LOGE("RdmDmx", "Failed to create dmx rcv task");
+        }
+
+        dmxSendTaskHandle = NULL;
+        xTaskCreatePinnedToCore(dmxSendTask, "DMX_SEND_TASK", 10240, nullptr, 2, &dmxSendTaskHandle, 0);
+        if (!dmxSendTaskHandle)
+        {
+            ESP_LOGE("RdmDmx", "Failed to create dmx send task");
         }
     }
 
@@ -87,8 +97,8 @@ public:
             dmxAddrByConfig = dmxAddrByRdm;
             serializeConfig();
         }
-        
-        if(dmxAddrByConfig != dmxAddr)
+
+        if (dmxAddrByConfig != dmxAddr)
         {
             dmxAddr = dmxAddrByConfig;
             dmxAddrByRdm = dmxAddrByConfig;
@@ -114,7 +124,7 @@ public:
         {
             personality = personalityByRdm;
             personalityByConfig = personalityByRdm;
-            serializeConfig();                                                                                    
+            serializeConfig();
         }
 
         dmxParams.numPixels = strip.getLengthTotal();
@@ -182,7 +192,7 @@ public:
 
     void handleOverlayDraw() override
     {
-        if(personality != 0) // pixel mapping mode
+        if (personality != 0) // pixel mapping mode
         {
             realtimeLock(realtimeTimeoutMs, REALTIME_MODE_E131);
             if (realtimeOverride && !(realtimeMode && useMainSegmentOnly))
@@ -282,7 +292,38 @@ void initPersonalities()
                                           { dmxParams.rdmDmx->personalityChanged(personality); });
 }
 
-void dmxTask(void *)
+void dmxSendTask(void *)
+{
+    
+    const uint8_t TX_PIN = 32;  // the pin we are using to TX with
+    const uint8_t RX_PIN = 33;  // the pin we are using to RX with
+    const uint8_t EN_PIN = 19; // the pin we are using to enable TX on the DMX transceiver
+    uint8_t data[DMX_MAX_PACKET_SIZE] = {0};
+    ESP_ERROR_CHECK(dmx_set_pin(DMX_NUM_1, TX_PIN, RX_PIN, EN_PIN));
+    ESP_ERROR_CHECK(dmx_driver_install(DMX_NUM_1, DMX_DEFAULT_INTR_FLAGS));
+        rdm_client_init(DMX_NUM_1, dmxParams.rdmDmx->dmxAddr, dmxParams.defaultPersonalityFootprint, "LICHTAUSGANG Blinder", dmxParams.defaultPersonalityName.c_str());
+
+
+    uint8_t d = 0;
+    while(true)
+    {   
+        //TODO really implement
+        dmx_write_slot(DMX_NUM_1, 1, d);
+        // dmx_write_slot(DMX_NUM_1, 2, d);
+        // dmx_write_slot(DMX_NUM_1, 3, d);
+        // dmx_write_slot(DMX_NUM_1, 4, d);
+        // dmx_write_slot(DMX_NUM_1, 5, d);
+        // dmx_write_slot(DMX_NUM_1, 6, d);
+        // dmx_write_slot(DMX_NUM_1, 7, d);
+        // dmx_write_slot(DMX_NUM_1, 8, d);
+        d++;
+        dmx_send(DMX_NUM_1, 513);
+        vTaskDelay(10 / portTICK_PERIOD_MS); //we have a higher prio than the idle task, thus we need to yield some time to not trigger the watchdog
+    }
+
+}
+
+void dmxReceiverTask(void *)
 {
     const uint8_t TX_PIN = 17; // the pin we are using to TX with
     const uint8_t RX_PIN = 16; // the pin we are using to RX with
