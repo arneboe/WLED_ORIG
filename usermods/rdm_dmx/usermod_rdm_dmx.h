@@ -142,21 +142,12 @@ public:
     void newDmxData()
     {
         lastDmxPacket = millis();
-        //send new dimmer value to dmx task and wake the task up
+        // send new dimmer value to dmx task and wake the task up
         xTaskNotifyIndexed(dmxSendTaskHandle, 0, dmxData[dmxAddr], eSetValueWithOverwrite);
     }
 
     void updateEffect()
     {
-        // disable leds if we have not seen dmx signals for some time
-        if (noDmx)
-        {
-            bri = 0;
-            transitionDelayTemp = 0;
-            colorUpdated(CALL_MODE_NOTIFICATION);
-            return;
-        }
-
         if (identify)
         {
             bri = 255;
@@ -170,6 +161,13 @@ public:
             colSec[1] = 255;
             colSec[2] = 255;
             colSec[3] = 255;
+            transitionDelayTemp = 0;
+            colorUpdated(CALL_MODE_NOTIFICATION);
+        }
+        // disable leds if we have not seen dmx signals for some time
+        else if (noDmx)
+        {
+            bri = 0;
             transitionDelayTemp = 0;
             colorUpdated(CALL_MODE_NOTIFICATION);
         }
@@ -198,53 +196,53 @@ public:
             transitionDelayTemp = 0;              // act fast
             colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
         }
+        else if (personality > 0)
+        {
+            pixelMapping();
+        }
     }
 
-    void handleOverlayDraw() override
+    void pixelMapping()
     {
 
-        if (personality != 0) // pixel mapping mode
+        // FIXMe implement getFootprint instead
+        const uint8_t groupPixels = personality;
+        // const uint16_t numPixelsGrouped = (dmxParams.numPixels + groupPixels - 1) / groupPixels; // integer math ceil
+        // const uint16_t footprint = numPixelsGrouped * 3;
+
+        const uint16_t numPixels = strip.getLengthTotal();
+        uint16_t addr = dmxAddr + 1;
+        uint8_t currentGrpPixel = 1;
+
+        if (noDmx)
         {
-            realtimeLock(realtimeTimeoutMs, REALTIME_MODE_E131);
-            if (realtimeOverride && !(realtimeMode && useMainSegmentOnly))
-                return;
-
-            // FIXMe implement getFootprint instead
-            const uint8_t groupPixels = personality;
-            // const uint16_t numPixelsGrouped = (dmxParams.numPixels + groupPixels - 1) / groupPixels; // integer math ceil
-            // const uint16_t footprint = numPixelsGrouped * 3;
-
-            const uint16_t numPixels = strip.getLengthTotal();
-            uint16_t addr = dmxAddr + 1;
-            uint8_t currentGrpPixel = 1;
-
-            if (noDmx)
+            for (uint16_t i = 0; i < numPixels; ++i)
             {
-                for (uint16_t i = 0; i < numPixels; ++i)
-                {
-                    setRealtimePixel(i, 0, 0, 0, 0);
-                }
+                strip.setPixelColor(i, 0, 0, 0, 0);
+                // setRealtimePixel(i, 0, 0, 0, 0);
             }
-            else
+        }
+        else
+        {
+            strip.setBrightness(255, true);
+            for (uint16_t i = 0; i < numPixels; ++i)
             {
-                for (uint16_t i = 0; i < numPixels; ++i)
-                {
-                    setRealtimePixel(i, dmxData[addr], dmxData[addr + 1], dmxData[addr + 2], 0);
-                    currentGrpPixel++;
+                strip.setPixelColor(i, dmxData[addr], dmxData[addr + 1], dmxData[addr + 2], 0);
+                // setRealtimePixel(i, dmxData[addr], dmxData[addr + 1], dmxData[addr + 2], 0);
+                currentGrpPixel++;
 
-                    if (currentGrpPixel > groupPixels)
-                    {
-                        addr += 3;
-                        currentGrpPixel = 1;
-                        if (addr > 510)
-                        { // FIXME calculate beforehand
-                            break;
-                        }
+                if (currentGrpPixel > groupPixels)
+                {
+                    addr += 3;
+                    currentGrpPixel = 1;
+                    if (addr > 510)
+                    { // FIXME calculate beforehand
+                        break;
                     }
                 }
             }
-            e131NewData = true;
         }
+        strip.show();
     }
 
     void addToConfig(JsonObject &root)
@@ -331,16 +329,16 @@ void dmxSendTask(void *)
     uint32_t brightness = 0;
     while (true)
     {
-        if(xTaskNotifyWaitIndexed(0, 0, 0, &brightness,  pdMS_TO_TICKS(1000)) == pdPASS)
+        if (xTaskNotifyWaitIndexed(0, 0, 0, &brightness, pdMS_TO_TICKS(1000)) == pdPASS)
         {
             dmx_write_slot(DMX_NUM_1, 1, uint8_t(brightness));
         }
         else
         {
-            //timeout, disable blinder
+            // timeout, disable blinder
             dmx_write_slot(DMX_NUM_1, 1, 0);
         }
-        //FIXME there is probably no need to send a full frame
+        // FIXME there is probably no need to send a full frame
         dmx_send(DMX_NUM_1, 513);
     }
 }
