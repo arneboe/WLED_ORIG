@@ -13,16 +13,14 @@ void dmxReceiverTask(void *instance);
 void IRAM_ATTR dmxSendTask(void *instance);
 class RdmDmx;
 
-
-
-struct DmxTaskParams
+struct DmxReceiveTaskParams
 {
     RdmDmx *rdmDmx;
     uint16_t numPixels;
     std::string defaultPersonalityName;
     uint16_t defaultPersonalityFootprint;
     bool threadRunning = false; // is true when the dmx thread is running
-} dmxParams;                    // This is global because the esp_dmx api uses c-callbacks and I cannot capture state in the callback lambdas
+} dmxReceiveParams;             // This is global because the esp_dmx api uses c-callbacks and I cannot capture state in the callback lambdas
 
 class RdmDmx : public Usermod
 {
@@ -66,11 +64,11 @@ public:
         personality = personalityByConfig;
         personalityByRdm = personalityByConfig;
 
-        dmxParams.rdmDmx = this;
-        dmxParams.numPixels = strip.getLengthTotal();
+        dmxReceiveParams.rdmDmx = this;
+        dmxReceiveParams.numPixels = strip.getLengthTotal();
         // the default personality will get id 1.
-        dmxParams.defaultPersonalityName = "WLED Mode";
-        dmxParams.defaultPersonalityFootprint = 13;
+        dmxReceiveParams.defaultPersonalityName = "WLED Mode";
+        dmxReceiveParams.defaultPersonalityFootprint = 13;
 
         dmxRcvTaskHandle = NULL;
 
@@ -91,6 +89,10 @@ public:
 
     void loop()
     {
+        if (!dmxReceiveParams.threadRunning)
+        {
+            return;
+        }
         if (dmxAddrByRdm != dmxAddr)
         {
             dmxAddr = dmxAddrByRdm;
@@ -102,10 +104,7 @@ public:
         {
             dmxAddr = dmxAddrByConfig;
             dmxAddrByRdm = dmxAddrByConfig;
-            if (dmxParams.threadRunning)
-            {
-                rdm_client_set_start_address(DMX_NUM_2, dmxAddr);
-            }
+            rdm_client_set_start_address(DMX_NUM_2, dmxAddr);
         }
 
         // web interface changed personality, update rdm
@@ -113,10 +112,7 @@ public:
         {
             personality = personalityByConfig;
             personalityByRdm = personalityByConfig;
-            if (dmxParams.threadRunning)
-            {
-                rdm_client_set_personality(DMX_NUM_2, personality + 1); //+1 because rmd is 1-based
-            }
+            rdm_client_set_personality(DMX_NUM_2, personality + 1); //+1 because rmd is 1-based
         }
 
         // rdm changed personality, update web interface
@@ -127,8 +123,8 @@ public:
             serializeConfig();
         }
 
-        dmxParams.numPixels = strip.getLengthTotal();
-        if (dmxParams.numPixels != strip.getLengthTotal())
+        dmxReceiveParams.numPixels = strip.getLengthTotal();
+        if (dmxReceiveParams.numPixels != strip.getLengthTotal())
         {
             // TODO
             // num pixels has changed, re-calculate personalities
@@ -276,8 +272,8 @@ void initPersonalities()
     for (int i = 1; i <= 20; ++i)
     {
         const uint16_t divisor = i;
-        const uint16_t numPixelsGrouped = (dmxParams.numPixels + divisor - 1) / divisor; // integer math ceil
-        const uint16_t footprint = numPixelsGrouped * 3;                                 // FIXME support RGBW?
+        const uint16_t numPixelsGrouped = (dmxReceiveParams.numPixels + divisor - 1) / divisor; // integer math ceil
+        const uint16_t footprint = numPixelsGrouped * 3;                                        // FIXME support RGBW?
         if (footprint > 512)
         {
             ESP_LOGE(TAG, "dmx error: Too many pixels for footprint %d. Skipping...", divisor);
@@ -286,28 +282,27 @@ void initPersonalities()
         rdm_client_add_personality(DMX_NUM_2, footprint, ("Pixmap (grp " + std::to_string(divisor) + ")").c_str());
     }
 
-    rdm_client_set_personality(DMX_NUM_2, dmxParams.rdmDmx->personality + 1); //+1 because rmd is 1-based
+    rdm_client_set_personality(DMX_NUM_2, dmxReceiveParams.rdmDmx->personality + 1); //+1 because rmd is 1-based
 
     rdm_client_set_personality_changed_cb(DMX_NUM_2, [](uint8_t personality)
-                                          { dmxParams.rdmDmx->personalityChanged(personality); });
+                                          { dmxReceiveParams.rdmDmx->personalityChanged(personality); });
 }
 
 void dmxSendTask(void *)
 {
-    
-    const uint8_t TX_PIN = 32;  // the pin we are using to TX with
-    const uint8_t RX_PIN = 33;  // the pin we are using to RX with
+
+    const uint8_t TX_PIN = 32; // the pin we are using to TX with
+    const uint8_t RX_PIN = 33; // the pin we are using to RX with
     const uint8_t EN_PIN = 19; // the pin we are using to enable TX on the DMX transceiver
     uint8_t data[DMX_MAX_PACKET_SIZE] = {0};
     ESP_ERROR_CHECK(dmx_set_pin(DMX_NUM_1, TX_PIN, RX_PIN, EN_PIN));
     ESP_ERROR_CHECK(dmx_driver_install(DMX_NUM_1, DMX_DEFAULT_INTR_FLAGS));
-        rdm_client_init(DMX_NUM_1, dmxParams.rdmDmx->dmxAddr, dmxParams.defaultPersonalityFootprint, "LICHTAUSGANG Blinder", dmxParams.defaultPersonalityName.c_str());
-
+    rdm_client_init(DMX_NUM_1, dmxReceiveParams.rdmDmx->dmxAddr, dmxReceiveParams.defaultPersonalityFootprint, "LICHTAUSGANG Blinder", dmxReceiveParams.defaultPersonalityName.c_str());
 
     uint8_t d = 0;
-    while(true)
-    {   
-        //TODO really implement
+    while (true)
+    {
+        // TODO really implement
         dmx_write_slot(DMX_NUM_1, 1, d);
         // dmx_write_slot(DMX_NUM_1, 2, d);
         // dmx_write_slot(DMX_NUM_1, 3, d);
@@ -318,9 +313,8 @@ void dmxSendTask(void *)
         // dmx_write_slot(DMX_NUM_1, 8, d);
         d++;
         dmx_send(DMX_NUM_1, 513);
-        vTaskDelay(10 / portTICK_PERIOD_MS); //we have a higher prio than the idle task, thus we need to yield some time to not trigger the watchdog
+        vTaskDelay(10 / portTICK_PERIOD_MS); // we have a higher prio than the idle task, thus we need to yield some time to not trigger the watchdog
     }
-
 }
 
 void dmxReceiverTask(void *)
@@ -333,15 +327,17 @@ void dmxReceiverTask(void *)
     ESP_ERROR_CHECK(dmx_set_pin(DMX_NUM_2, TX_PIN, RX_PIN, EN_PIN));
     ESP_ERROR_CHECK(dmx_driver_install(DMX_NUM_2, DMX_DEFAULT_INTR_FLAGS));
     // TODO use SP_ERROR_CHECK
-    rdm_client_init(DMX_NUM_2, dmxParams.rdmDmx->dmxAddr, dmxParams.defaultPersonalityFootprint, "LICHTAUSGANG Blinder", dmxParams.defaultPersonalityName.c_str());
+    rdm_client_init(DMX_NUM_2, dmxReceiveParams.rdmDmx->dmxAddr,
+                    dmxReceiveParams.defaultPersonalityFootprint, "LICHTAUSGANG Blinder",
+                    dmxParams.defaultPersonalityName.c_str());
 
     rdm_client_set_start_address_changed_cb(DMX_NUM_2, [](uint16_t newAddr)
-                                            { dmxParams.rdmDmx->updateDmxAddr(newAddr); });
+                                            { dmxReceiveParams.rdmDmx->updateDmxAddr(newAddr); });
     rdm_client_set_notify_cb(DMX_NUM_2, [](bool identify)
-                             { dmxParams.rdmDmx->setIdentify(identify); });
+                             { dmxReceiveParams.rdmDmx->setIdentify(identify); });
 
     initPersonalities();
-    dmxParams.threadRunning = true;
+    dmxReceiveParams.threadRunning = true;
     while (true)
     {
         dmx_packet_t dmxPacket;
@@ -359,9 +355,9 @@ void dmxReceiverTask(void *)
                 else
                 {
                     // FIXME only read part of the buffer directly into rdmDmx?!
-                    dmx_read(DMX_NUM_2, dmxParams.rdmDmx->dmxData, dmxPacket.size);
+                    dmx_read(DMX_NUM_2, dmxReceiveParams.rdmDmx->dmxData, dmxPacket.size);
                     // TODO replace with some kind of thread signal feature
-                    dmxParams.rdmDmx->newDmxData();
+                    dmxReceiveParams.rdmDmx->newDmxData();
                 }
             }
             else
