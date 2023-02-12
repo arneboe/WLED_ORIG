@@ -175,8 +175,8 @@ public:
         }
         else if (personality == 0) // WLED effect mode
         {
-
-            const uint16_t addr = std::min(499, dmxAddr);
+            //+1 to skip dimmer channel
+            const uint16_t addr = std::min(499, dmxAddr) + 1;
             const uint8_t *data = &dmxData[addr];
 
             realtimeMode = REALTIME_MODE_INACTIVE;
@@ -215,7 +215,7 @@ public:
             // const uint16_t footprint = numPixelsGrouped * 3;
 
             const uint16_t numPixels = strip.getLengthTotal();
-            uint16_t addr = dmxAddr;
+            uint16_t addr = dmxAddr + 1;
             uint8_t currentGrpPixel = 1;
 
             if (noDmx)
@@ -299,12 +299,13 @@ void initPersonalities()
         const uint16_t divisor = i;
         const uint16_t numPixelsGrouped = (dmxReceiveParams.numPixels + divisor - 1) / divisor; // integer math ceil
         const uint16_t footprint = numPixelsGrouped * 3;                                        // FIXME support RGBW?
-        if (footprint > 512)
+        if (footprint > 511)
         {
             ESP_LOGE(TAG, "dmx error: Too many pixels for footprint %d. Skipping...", divisor);
             continue;
         }
-        rdm_client_add_personality(DMX_NUM_2, footprint, ("Pixmap (grp " + std::to_string(divisor) + ")").c_str());
+        //+ 1 because first channel is dimmer
+        rdm_client_add_personality(DMX_NUM_2, footprint + 1, ("Pixmap (grp " + std::to_string(divisor) + ")").c_str());
     }
 
     rdm_client_set_personality(DMX_NUM_2, dmxReceiveParams.rdmDmx->personality + 1); //+1 because rmd is 1-based
