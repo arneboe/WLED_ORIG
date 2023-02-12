@@ -142,6 +142,8 @@ public:
     void newDmxData()
     {
         lastDmxPacket = millis();
+        //send new dimmer value to dmx task and wake the task up
+        xTaskNotifyIndexed(dmxSendTaskHandle, 0, dmxData[dmxAddr], eSetValueWithOverwrite);
     }
 
     void updateEffect()
@@ -176,7 +178,6 @@ public:
 
             const uint16_t addr = std::min(499, dmxAddr);
             const uint8_t *data = &dmxData[addr];
-
 
             realtimeMode = REALTIME_MODE_INACTIVE;
             bri = data[0];
@@ -326,23 +327,20 @@ void dmxSendTask(void *)
     rdm_client_init(DMX_NUM_1, dmxReceiveParams.rdmDmx->dmxAddr, dmxReceiveParams.defaultPersonalityFootprint, "LICHTAUSGANG Blinder", dmxReceiveParams.defaultPersonalityName.c_str());
 
     uint8_t d = 0;
+    uint32_t brightness = 0;
     while (true)
     {
-        // TODO really implement
-        // dmx_write_slot(DMX_NUM_1, 1, d);
-        // dmx_write_slot(DMX_NUM_1, 2, d);
-        // dmx_write_slot(DMX_NUM_1, 3, d);
-        // dmx_write_slot(DMX_NUM_1, 4, d);
-        // dmx_write_slot(DMX_NUM_1, 5, d);
-        // dmx_write_slot(DMX_NUM_1, 6, d);
-        // dmx_write_slot(DMX_NUM_1, 7, d);
-        // dmx_write_slot(DMX_NUM_1, 8, d);
-        d++;
+        if(xTaskNotifyWaitIndexed(0, 0, 0, &brightness,  pdMS_TO_TICKS(2000)) == pdPASS)
+        {
+            dmx_write_slot(DMX_NUM_1, 1, uint8_t(brightness));
+        }
+        else
+        {
+            //timeout, disable blinder
+            dmx_write_slot(DMX_NUM_1, 1, 0);
+        }
+        //FIXME there is probably no need to send a full frame
         dmx_send(DMX_NUM_1, 513);
-
-        // TODO this should be synced with receiving new data instead of a timer.
-        //  Use some signal magic stuff
-        vTaskDelay(10 / portTICK_PERIOD_MS); // we have a higher prio than the idle task, thus we need to yield some time to not trigger the watchdog
     }
 }
 
