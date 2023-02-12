@@ -46,9 +46,11 @@ public:
 
     uint8_t dmxData[513] = {0};
 
+    unsigned long lastDmxPacket = 0;
+    bool noDmx = true;
+
     void setup()
     {
-
         // FIXME use correct upper bound
         //       should also work in pixel mode
         //       and also check this every time the addr changed
@@ -68,7 +70,7 @@ public:
         dmxReceiveParams.numPixels = strip.getLengthTotal();
         // the default personality will get id 1.
         dmxReceiveParams.defaultPersonalityName = "WLED Mode";
-        dmxReceiveParams.defaultPersonalityFootprint = 13;
+        dmxReceiveParams.defaultPersonalityFootprint = 14;
 
         dmxRcvTaskHandle = NULL;
 
@@ -123,6 +125,8 @@ public:
             serializeConfig();
         }
 
+        noDmx = millis() - lastDmxPacket > 2000;
+
         dmxReceiveParams.numPixels = strip.getLengthTotal();
         if (dmxReceiveParams.numPixels != strip.getLengthTotal())
         {
@@ -137,10 +141,20 @@ public:
     // notify that new data has been received
     void newDmxData()
     {
+        lastDmxPacket = millis();
     }
 
     void updateEffect()
     {
+        // disable leds if we have not seen dmx signals for some time
+        if (noDmx)
+        {
+            bri = 0;
+            transitionDelayTemp = 0;
+            colorUpdated(CALL_MODE_NOTIFICATION);
+            return;
+        }
+
         if (identify)
         {
             bri = 255;
@@ -159,14 +173,13 @@ public:
         }
         else if (personality == 0) // WLED effect mode
         {
-            const uint16_t addr = std::min(500, dmxAddr);
+
+            const uint16_t addr = std::min(499, dmxAddr);
             const uint8_t *data = &dmxData[addr];
 
+
             realtimeMode = REALTIME_MODE_INACTIVE;
-            if (bri != data[0])
-            {
-                bri = data[0];
-            }
+            bri = data[0];
             if (data[1] < strip.getModeCount())
                 effectCurrent = data[1];
             effectSpeed = data[2];
@@ -188,6 +201,7 @@ public:
 
     void handleOverlayDraw() override
     {
+
         if (personality != 0) // pixel mapping mode
         {
             realtimeLock(realtimeTimeoutMs, REALTIME_MODE_E131);
@@ -203,18 +217,28 @@ public:
             uint16_t addr = dmxAddr;
             uint8_t currentGrpPixel = 1;
 
-            for (uint16_t i = 0; i < numPixels; ++i)
+            if (noDmx)
             {
-                setRealtimePixel(i, dmxData[addr], dmxData[addr + 1], dmxData[addr + 2], 0);
-                currentGrpPixel++;
-
-                if (currentGrpPixel > groupPixels)
+                for (uint16_t i = 0; i < numPixels; ++i)
                 {
-                    addr += 3;
-                    currentGrpPixel = 1;
-                    if (addr > 510)
-                    { // FIXME calculate beforehand
-                        break;
+                    setRealtimePixel(i, 0, 0, 0, 0);
+                }
+            }
+            else
+            {
+                for (uint16_t i = 0; i < numPixels; ++i)
+                {
+                    setRealtimePixel(i, dmxData[addr], dmxData[addr + 1], dmxData[addr + 2], 0);
+                    currentGrpPixel++;
+
+                    if (currentGrpPixel > groupPixels)
+                    {
+                        addr += 3;
+                        currentGrpPixel = 1;
+                        if (addr > 510)
+                        { // FIXME calculate beforehand
+                            break;
+                        }
                     }
                 }
             }
@@ -297,13 +321,15 @@ void dmxSendTask(void *)
     uint8_t data[DMX_MAX_PACKET_SIZE] = {0};
     ESP_ERROR_CHECK(dmx_set_pin(DMX_NUM_1, TX_PIN, RX_PIN, EN_PIN));
     ESP_ERROR_CHECK(dmx_driver_install(DMX_NUM_1, DMX_DEFAULT_INTR_FLAGS));
+
+    // FIXME i dont need rdm client here
     rdm_client_init(DMX_NUM_1, dmxReceiveParams.rdmDmx->dmxAddr, dmxReceiveParams.defaultPersonalityFootprint, "LICHTAUSGANG Blinder", dmxReceiveParams.defaultPersonalityName.c_str());
 
     uint8_t d = 0;
     while (true)
     {
         // TODO really implement
-        dmx_write_slot(DMX_NUM_1, 1, d);
+        // dmx_write_slot(DMX_NUM_1, 1, d);
         // dmx_write_slot(DMX_NUM_1, 2, d);
         // dmx_write_slot(DMX_NUM_1, 3, d);
         // dmx_write_slot(DMX_NUM_1, 4, d);
@@ -313,6 +339,9 @@ void dmxSendTask(void *)
         // dmx_write_slot(DMX_NUM_1, 8, d);
         d++;
         dmx_send(DMX_NUM_1, 513);
+
+        // TODO this should be synced with receiving new data instead of a timer.
+        //  Use some signal magic stuff
         vTaskDelay(10 / portTICK_PERIOD_MS); // we have a higher prio than the idle task, thus we need to yield some time to not trigger the watchdog
     }
 }
@@ -329,7 +358,7 @@ void dmxReceiverTask(void *)
     // TODO use SP_ERROR_CHECK
     rdm_client_init(DMX_NUM_2, dmxReceiveParams.rdmDmx->dmxAddr,
                     dmxReceiveParams.defaultPersonalityFootprint, "LICHTAUSGANG Blinder",
-                    dmxParams.defaultPersonalityName.c_str());
+                    dmxReceiveParams.defaultPersonalityName.c_str());
 
     rdm_client_set_start_address_changed_cb(DMX_NUM_2, [](uint16_t newAddr)
                                             { dmxReceiveParams.rdmDmx->updateDmxAddr(newAddr); });
