@@ -330,7 +330,7 @@ void dmxSendTask(void *)
     uint32_t brightness = 0;
     while (true)
     {
-        if(xTaskNotifyWaitIndexed(0, 0, 0, &brightness,  pdMS_TO_TICKS(2000)) == pdPASS)
+        if(xTaskNotifyWaitIndexed(0, 0, 0, &brightness,  pdMS_TO_TICKS(1000)) == pdPASS)
         {
             dmx_write_slot(DMX_NUM_1, 1, uint8_t(brightness));
         }
