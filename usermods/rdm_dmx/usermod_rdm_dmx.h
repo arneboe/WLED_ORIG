@@ -150,51 +150,98 @@ public:
     {
         if (identify)
         {
-            bri = 255;
-            effectCurrent = 0;
-            effectPalette = 0;
-            col[0] = 255;
-            col[1] = 255;
-            col[2] = 255;
-            col[3] = 255;
-            colSec[0] = 255;
-            colSec[1] = 255;
-            colSec[2] = 255;
-            colSec[3] = 255;
-            transitionDelayTemp = 0;
-            colorUpdated(CALL_MODE_NOTIFICATION);
+            // TODO re-implement with new effect api
+            //  bri = 255;
+            //  effectCurrent = 0;
+            //  effectPalette = 0;
+            //  col[0] = 255;
+            //  col[1] = 255;
+            //  col[2] = 255;
+            //  col[3] = 255;
+            //  colSec[0] = 255;
+            //  colSec[1] = 255;
+            //  colSec[2] = 255;
+            //  colSec[3] = 255;
+            //  transitionDelayTemp = 0;
+            //  colorUpdated(CALL_MODE_NOTIFICATION);
         }
         // disable leds if we have not seen dmx signals for some time
         else if (noDmx)
         {
+            // TODO reimplement with new effect engine!
             bri = 0;
-            transitionDelayTemp = 0;
-            colorUpdated(CALL_MODE_NOTIFICATION);
+            strip.setBrightness(0, true);
         }
         else if (personality == 0) // WLED effect mode
         {
-            //+1 to skip dimmer channel
-            const uint16_t addr = std::min(499, dmxAddr) + 1;
+            // 15 channels [bri,effectCurrent,effectSpeed,effectIntensity,effectPalette,effectOption,R,G,B,R2,G2,B2,R3,G3,B3]
+            const int numEffectChannels = 15;
+            const int maxAddr = 513 - numEffectChannels;
+            const uint16_t addr = std::min(maxAddr, dmxAddr + 1); //+ 1 because 0 is blinder dimmer channel
             const uint8_t *data = &dmxData[addr];
 
-            realtimeMode = REALTIME_MODE_INACTIVE;
-            bri = data[0];
-            if (data[1] < strip.getModeCount())
-                effectCurrent = data[1];
-            effectSpeed = data[2];
-            effectIntensity = data[3];
-            effectPalette = data[4];
-            col[0] = data[5];
-            col[1] = data[6];
-            col[2] = data[7];
-            colSec[0] = data[8];
-            colSec[1] = data[9];
-            colSec[2] = data[10];
+            realtimeMode = REALTIME_MODE_INACTIVE; // TODO check if still need
+            fadeTransition = false;                // fade should be done by the operator
 
-            col[3] = data[11]; // white
-            colSec[3] = data[12];
-            transitionDelayTemp = 0;              // act fast
-            colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
+            // this loop is mostly copy&paste from e131.cpp
+            for (uint8_t id = 0; id < strip.getSegmentsNum(); id++)
+            {
+                Segment &seg = strip.getSegment(id);
+
+                const uint8_t mode = std::min(strip.getModeCount(), data[1]);
+                seg.setMode(mode);
+                seg.speed = data[2];
+                seg.intensity = data[3];
+                seg.setPalette(data[4]);
+
+                const uint8_t segOption = (uint8_t)floor(data[5] / 64.0);
+                if (segOption == 0 && (seg.mirror || seg.reverse))
+                {
+                    seg.setOption(SEG_OPTION_MIRROR, false);
+                    seg.setOption(SEG_OPTION_REVERSED, false);
+                }
+                if (segOption == 1 && (seg.mirror || !seg.reverse))
+                {
+                    seg.setOption(SEG_OPTION_MIRROR, false);
+                    seg.setOption(SEG_OPTION_REVERSED, true);
+                }
+                if (segOption == 2 && (!seg.mirror || seg.reverse))
+                {
+                    seg.setOption(SEG_OPTION_MIRROR, true);
+                    seg.setOption(SEG_OPTION_REVERSED, false);
+                }
+                if (segOption == 3 && (!seg.mirror || !seg.reverse))
+                {
+                    seg.setOption(SEG_OPTION_MIRROR, true);
+                    seg.setOption(SEG_OPTION_REVERSED, true);
+                }
+
+                uint32_t colors[3];
+                colors[0] = RGBW32(data[6], data[7], data[8], 0);
+                colors[1] = RGBW32(data[9], data[10], data[11], 0);
+                colors[2] = RGBW32(data[12], data[13], data[14], 0);
+                if (colors[0] != seg.colors[0])
+                {
+                    seg.setColor(0, colors[0]);
+                }
+                if (colors[1] != seg.colors[1])
+                {
+                    seg.setColor(1, colors[1]);
+                }
+                if (colors[2] != seg.colors[2])
+                {
+                    seg.setColor(2, colors[2]);
+                }
+
+                // all segments are always fully visible
+                seg.setOpacity(255);
+            }
+            bri = data[0];
+            strip.setBrightness(bri, true);
+
+            // TODO not sure if I still need this?
+            // transitionDelayTemp = 0;              // act fast
+            // colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
         }
         else if (personality > 0)
         {
@@ -204,6 +251,9 @@ public:
 
     void pixelMapping()
     {
+
+        //TODO reimplement with new wled api.
+        //     see how e131 does it!
 
         // FIXMe implement getFootprint instead
         const uint8_t groupPixels = personality;
