@@ -47,6 +47,10 @@
   #include "../usermods/BH1750_v2/usermod_BH1750.h"
 #endif
 
+#ifdef USERMOD_RDM_DMX
+#include "../usermods/rdm_dmx/usermod_rdm_dmx.h"
+#endif
+
 // BME280 v2 usermod. Define "USERMOD_BME280" in my_config.h
 #ifdef USERMOD_BME280
   #include "../usermods/BME280_v2/usermod_bme280.h"
@@ -195,6 +199,10 @@ void registerUsermods()
   //usermods.add(new MyExampleUsermod());
   #ifdef USERMOD_BATTERY
   usermods.add(new UsermodBattery());
+  #endif
+
+  #ifdef USERMOD_RDM_DMX
+  usermods.add(new RdmDmx());
   #endif
 
   #ifdef USERMOD_DALLASTEMPERATURE
