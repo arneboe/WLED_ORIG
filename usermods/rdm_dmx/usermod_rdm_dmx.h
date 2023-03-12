@@ -150,25 +150,11 @@ public:
     {
         if (identify)
         {
-            // TODO re-implement with new effect api
-            //  bri = 255;
-            //  effectCurrent = 0;
-            //  effectPalette = 0;
-            //  col[0] = 255;
-            //  col[1] = 255;
-            //  col[2] = 255;
-            //  col[3] = 255;
-            //  colSec[0] = 255;
-            //  colSec[1] = 255;
-            //  colSec[2] = 255;
-            //  colSec[3] = 255;
-            //  transitionDelayTemp = 0;
-            //  colorUpdated(CALL_MODE_NOTIFICATION);
+            setEffect(255, 0, 255, 255, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255);
         }
         // disable leds if we have not seen dmx signals for some time
         else if (noDmx)
         {
-            // TODO reimplement with new effect engine!
             bri = 0;
             strip.setBrightness(0, true);
         }
@@ -183,65 +169,8 @@ public:
             realtimeMode = REALTIME_MODE_INACTIVE; // TODO check if still need
             fadeTransition = false;                // fade should be done by the operator
 
-            // this loop is mostly copy&paste from e131.cpp
-            for (uint8_t id = 0; id < strip.getSegmentsNum(); id++)
-            {
-                Segment &seg = strip.getSegment(id);
-
-                const uint8_t mode = std::min(strip.getModeCount(), data[1]);
-                seg.setMode(mode);
-                seg.speed = data[2];
-                seg.intensity = data[3];
-                seg.setPalette(data[4]);
-
-                const uint8_t segOption = (uint8_t)floor(data[5] / 64.0);
-                if (segOption == 0 && (seg.mirror || seg.reverse))
-                {
-                    seg.setOption(SEG_OPTION_MIRROR, false);
-                    seg.setOption(SEG_OPTION_REVERSED, false);
-                }
-                if (segOption == 1 && (seg.mirror || !seg.reverse))
-                {
-                    seg.setOption(SEG_OPTION_MIRROR, false);
-                    seg.setOption(SEG_OPTION_REVERSED, true);
-                }
-                if (segOption == 2 && (!seg.mirror || seg.reverse))
-                {
-                    seg.setOption(SEG_OPTION_MIRROR, true);
-                    seg.setOption(SEG_OPTION_REVERSED, false);
-                }
-                if (segOption == 3 && (!seg.mirror || !seg.reverse))
-                {
-                    seg.setOption(SEG_OPTION_MIRROR, true);
-                    seg.setOption(SEG_OPTION_REVERSED, true);
-                }
-
-                uint32_t colors[3];
-                colors[0] = RGBW32(data[6], data[7], data[8], 0);
-                colors[1] = RGBW32(data[9], data[10], data[11], 0);
-                colors[2] = RGBW32(data[12], data[13], data[14], 0);
-                if (colors[0] != seg.colors[0])
-                {
-                    seg.setColor(0, colors[0]);
-                }
-                if (colors[1] != seg.colors[1])
-                {
-                    seg.setColor(1, colors[1]);
-                }
-                if (colors[2] != seg.colors[2])
-                {
-                    seg.setColor(2, colors[2]);
-                }
-
-                // all segments are always fully visible
-                seg.setOpacity(255);
-            }
-            bri = data[0];
-            strip.setBrightness(bri, true);
-
-            // TODO not sure if I still need this?
-            // transitionDelayTemp = 0;              // act fast
-            // colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
+            setEffect(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
+                      data[8], data[9], data[10], data[11], data[12], data[13], data[14]);
         }
         else if (personality > 0)
         {
@@ -252,8 +181,8 @@ public:
     void pixelMapping()
     {
 
-        //TODO reimplement with new wled api.
-        //     see how e131 does it!
+        // TODO reimplement with new wled api.
+        //      see how e131 does it!
 
         // FIXMe implement getFootprint instead
         const uint8_t groupPixels = personality;
@@ -268,6 +197,7 @@ public:
         {
             for (uint16_t i = 0; i < numPixels; ++i)
             {
+                //FIXME IRAM_ATTR is missing now in setPixelColor. see if still works
                 strip.setPixelColor(i, 0, 0, 0, 0);
                 // setRealtimePixel(i, 0, 0, 0, 0);
             }
@@ -293,6 +223,70 @@ public:
             }
         }
         strip.show();
+    }
+
+    void setEffect(uint8_t masterBrightness, uint8_t effectCurrent, uint8_t effectSpeed, uint8_t effectIntensity, uint8_t effectPalette, uint8_t effectOption,
+                   uint8_t r1, uint8_t g1, uint8_t b1, uint8_t r2, uint8_t g2, uint8_t b2, uint8_t r3, uint8_t g3, uint8_t b3)
+    {
+        // this loop is mostly copy&paste from e131.cpp
+        for (uint8_t id = 0; id < strip.getSegmentsNum(); id++)
+        {
+            Segment &seg = strip.getSegment(id);
+
+            const uint8_t mode = std::min(strip.getModeCount(), effectCurrent);
+            seg.setMode(mode);
+            seg.speed = effectSpeed;
+            seg.intensity = effectIntensity;
+            seg.setPalette(effectPalette);
+
+            const uint8_t segOption = (uint8_t)floor(effectOption / 64.0);
+            if (segOption == 0 && (seg.mirror || seg.reverse))
+            {
+                seg.setOption(SEG_OPTION_MIRROR, false);
+                seg.setOption(SEG_OPTION_REVERSED, false);
+            }
+            if (segOption == 1 && (seg.mirror || !seg.reverse))
+            {
+                seg.setOption(SEG_OPTION_MIRROR, false);
+                seg.setOption(SEG_OPTION_REVERSED, true);
+            }
+            if (segOption == 2 && (!seg.mirror || seg.reverse))
+            {
+                seg.setOption(SEG_OPTION_MIRROR, true);
+                seg.setOption(SEG_OPTION_REVERSED, false);
+            }
+            if (segOption == 3 && (!seg.mirror || !seg.reverse))
+            {
+                seg.setOption(SEG_OPTION_MIRROR, true);
+                seg.setOption(SEG_OPTION_REVERSED, true);
+            }
+
+            uint32_t colors[3];
+            colors[0] = RGBW32(r1, g1, b1, 0);
+            colors[1] = RGBW32(r2, g2, b2, 0);
+            colors[2] = RGBW32(r3, g3, b3, 0);
+            if (colors[0] != seg.colors[0])
+            {
+                seg.setColor(0, colors[0]);
+            }
+            if (colors[1] != seg.colors[1])
+            {
+                seg.setColor(1, colors[1]);
+            }
+            if (colors[2] != seg.colors[2])
+            {
+                seg.setColor(2, colors[2]);
+            }
+
+            // all segments are always fully visible
+            seg.setOpacity(255);
+        }
+        bri = masterBrightness;
+        strip.setBrightness(bri, true);
+
+        // TODO not sure if I still need this?
+        // transitionDelayTemp = 0;              // act fast
+        // colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
     }
 
     void addToConfig(JsonObject &root)
