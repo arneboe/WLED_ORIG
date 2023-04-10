@@ -504,6 +504,7 @@ void WLED::initAP(bool resetAP)
   WiFi.softAPConfig(IPAddress(4, 3, 2, 1), IPAddress(4, 3, 2, 1), IPAddress(255, 255, 255, 0));
   WiFi.softAP(apSSID, apPass, apChannel, apHide);
 
+
   if (!apActive) // start captive portal if AP active
   {
     DEBUG_PRINTLN(F("Init AP interfaces"));
@@ -807,7 +808,7 @@ void WLED::handleConnection()
       initConnection();
     }
     if (!apActive && now - lastReconnectAttempt > 12000 && (!wasConnected || apBehavior == AP_BEHAVIOR_NO_CONN)) {
-      DEBUG_PRINTLN(F("Not connected AP."));
+      // DEBUG_PRINTLN(F("Not connected AP."));
       initAP();
     }
   } else if (!interfacesInited) { //newly connected

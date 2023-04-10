@@ -8,6 +8,15 @@
 #include "freertos/task.h"
 #include <atomic>
 
+
+/**
+ * TODO:
+ *  - blink first led red when no data is received on any input
+ *  - Try to connect o AP, if AP does not exist, do nothing
+ *  - fix wifi crash
+*/
+
+
 void startAddressChangedCb(uint16_t newAddr);
 void dmxReceiverTask(void *instance);
 void IRAM_ATTR dmxSendTask(void *instance);
