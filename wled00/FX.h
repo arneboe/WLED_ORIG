@@ -541,12 +541,12 @@ typedef struct Segment {
 
     // 1D strip
     uint16_t virtualLength(void) const;
-    void setPixelColor(int n, uint32_t c); // set relative pixel within segment with color
-    void setPixelColor(int n, byte r, byte g, byte b, byte w = 0) { setPixelColor(n, RGBW32(r,g,b,w)); } // automatically inline
-    void setPixelColor(int n, CRGB c)                             { setPixelColor(n, RGBW32(c.r,c.g,c.b,0)); } // automatically inline
-    void setPixelColor(float i, uint32_t c, bool aa = true);
-    void setPixelColor(float i, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0, bool aa = true) { setPixelColor(i, RGBW32(r,g,b,w), aa); }
-    void setPixelColor(float i, CRGB c, bool aa = true)                                         { setPixelColor(i, RGBW32(c.r,c.g,c.b,0), aa); }
+    void IRAM_ATTR setPixelColor(int n, uint32_t c); // set relative pixel within segment with color
+    void IRAM_ATTR setPixelColor(int n, byte r, byte g, byte b, byte w = 0) { setPixelColor(n, RGBW32(r,g,b,w)); } // automatically inline
+    void IRAM_ATTR setPixelColor(int n, CRGB c)                             { setPixelColor(n, RGBW32(c.r,c.g,c.b,0)); } // automatically inline
+    void IRAM_ATTR setPixelColor(float i, uint32_t c, bool aa = true);
+    void IRAM_ATTR setPixelColor(float i, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0, bool aa = true) { setPixelColor(i, RGBW32(r,g,b,w), aa); }
+    void IRAM_ATTR setPixelColor(float i, CRGB c, bool aa = true)                                         { setPixelColor(i, RGBW32(c.r,c.g,c.b,0), aa); }
     uint32_t getPixelColor(int i);
     // 1D support functions (some implement 2D as well)
     void blur(uint8_t);
@@ -705,38 +705,38 @@ class WS2812FX {  // 96 bytes
 
     static WS2812FX* getInstance(void) { return instance; }
 
-    void
+    
 #ifdef WLED_DEBUG
-      printSize(),
+    void printSize();
 #endif
-      finalizeInit(),
-      service(void),
-      setMode(uint8_t segid, uint8_t m),
-      setColor(uint8_t slot, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0),
-      setColor(uint8_t slot, uint32_t c),
-      setCCT(uint16_t k),
-      setBrightness(uint8_t b, bool direct = false),
-      setRange(uint16_t i, uint16_t i2, uint32_t col),
-      setTransitionMode(bool t),
-      purgeSegments(bool force = false),
-      setSegment(uint8_t n, uint16_t start, uint16_t stop, uint8_t grouping = 1, uint8_t spacing = 0, uint16_t offset = UINT16_MAX, uint16_t startY=0, uint16_t stopY=1),
-      setMainSegmentId(uint8_t n),
-      restartRuntime(),
-      resetSegments(),
-      makeAutoSegments(bool forceReset = false),
-      fixInvalidSegments(),
-      setPixelColor(int n, uint32_t c),
-      show(void),
-      setTargetFps(uint8_t fps),
-      deserializeMap(uint8_t n=0);
+    void finalizeInit();
+    void service(void);
+    void setMode(uint8_t segid, uint8_t m);
+    void setColor(uint8_t slot, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0);
+    void setColor(uint8_t slot, uint32_t c);
+    void setCCT(uint16_t k);
+    void setBrightness(uint8_t b, bool direct = false);
+    void setRange(uint16_t i, uint16_t i2, uint32_t col);
+    void setTransitionMode(bool t);
+    void purgeSegments(bool force = false);
+    void setSegment(uint8_t n, uint16_t start, uint16_t stop, uint8_t grouping = 1, uint8_t spacing = 0, uint16_t offset = UINT16_MAX, uint16_t startY=0, uint16_t stopY=1);
+    void setMainSegmentId(uint8_t n);
+    void restartRuntime();
+    void resetSegments();
+    void makeAutoSegments(bool forceReset = false);
+    void fixInvalidSegments();
+    void IRAM_ATTR setPixelColor(int n, uint32_t c);
+    void show(void);
+    void setTargetFps(uint8_t fps);
+    void deserializeMap(uint8_t n=0);
 
     void fill(uint32_t c) { for (int i = 0; i < _length; i++) setPixelColor(i, c); } // fill whole strip with color (inline)
     void addEffect(uint8_t id, mode_ptr mode_fn, const char *mode_name); // add effect to the list; defined in FX.cpp
     void setupEffectData(void); // add default effects to the list; defined in FX.cpp
 
     // outsmart the compiler :) by correctly overloading
-    inline void setPixelColor(int n, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0) { setPixelColor(n, RGBW32(r,g,b,w)); }
-    inline void setPixelColor(int n, CRGB c) { setPixelColor(n, c.red, c.green, c.blue); }
+    inline void IRAM_ATTR setPixelColor(int n, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0) { setPixelColor(n, RGBW32(r,g,b,w)); }
+    inline void IRAM_ATTR setPixelColor(int n, CRGB c) { setPixelColor(n, c.red, c.green, c.blue); }
     inline void trigger(void) { _triggered = true; } // Forces the next frame to be computed on all active segments.
     inline void setShowCallback(show_callback cb) { _callback = cb; }
     inline void setTransition(uint16_t t) { _transitionDur = t; }

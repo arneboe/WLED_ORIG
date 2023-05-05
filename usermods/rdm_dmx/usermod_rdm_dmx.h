@@ -8,14 +8,12 @@
 #include "freertos/task.h"
 #include <atomic>
 
-
 /**
  * TODO:
- *  - blink first led red when no data is received on any input
- *  - Try to connect o AP, if AP does not exist, do nothing
+ *  - blink first and last led red when no data is received on any input
+ *  - strobo channel overlay for all effects
  *  - fix wifi crash
-*/
-
+ */
 
 void startAddressChangedCb(uint16_t newAddr);
 void dmxReceiverTask(void *instance);
@@ -79,7 +77,7 @@ public:
         dmxReceiveParams.numPixels = strip.getLengthTotal();
         // the default personality will get id 1.
         dmxReceiveParams.defaultPersonalityName = "WLED Mode";
-        dmxReceiveParams.defaultPersonalityFootprint = 14;
+        dmxReceiveParams.defaultPersonalityFootprint = 16;
 
         dmxRcvTaskHandle = NULL;
 
@@ -147,6 +145,12 @@ public:
         updateEffect();
     }
 
+    void handleOverlayDraw() override
+    {
+        // DO not use. update rate depends on selected effect!
+        // If you set effect 0 (solid) this will never be called again
+    }
+
     // notify that new data has been received
     void newDmxData()
     {
@@ -159,7 +163,8 @@ public:
     {
         if (identify)
         {
-            setEffect(255, 0, 255, 255, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255);
+            // DEBUG_PRINTF("IDENTIFY\n");
+            setEffect(255, 2, 128, 255, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0);
         }
         // disable leds if we have not seen dmx signals for some time
         else if (noDmx)
@@ -190,6 +195,7 @@ public:
     void pixelMapping()
     {
 
+        // DEBUG_PRINTF("map\n");
         // TODO reimplement with new wled api.
         //      see how e131 does it!
 
@@ -199,6 +205,7 @@ public:
         // const uint16_t footprint = numPixelsGrouped * 3;
 
         const uint16_t numPixels = strip.getLengthTotal();
+        // DEBUG_PRINTF("numpix: %i\n", numPixels);
         uint16_t addr = dmxAddr + 1;
         uint8_t currentGrpPixel = 1;
 
@@ -206,18 +213,23 @@ public:
         {
             for (uint16_t i = 0; i < numPixels; ++i)
             {
-                //FIXME IRAM_ATTR is missing now in setPixelColor. see if still works
+                // FIXME IRAM_ATTR is missing now in setPixelColor. see if still works
                 strip.setPixelColor(i, 0, 0, 0, 0);
-                // setRealtimePixel(i, 0, 0, 0, 0);
             }
         }
         else
         {
-            strip.setBrightness(255, true);
+            if(strip.getBrightness() != 255)
+            {
+                strip.setBrightness(255, true);
+            }
             for (uint16_t i = 0; i < numPixels; ++i)
             {
-                strip.setPixelColor(i, dmxData[addr], dmxData[addr + 1], dmxData[addr + 2], 0);
-                // setRealtimePixel(i, dmxData[addr], dmxData[addr + 1], dmxData[addr + 2], 0);
+                const uint8_t r = gamma8(dmxData[addr]);
+                const uint8_t g = gamma8(dmxData[addr + 1]);
+                const uint8_t b = gamma8(dmxData[addr + 2]);
+
+                strip.setPixelColor(i, r, g, b, 0);
                 currentGrpPixel++;
 
                 if (currentGrpPixel > groupPixels)
@@ -237,17 +249,27 @@ public:
     void setEffect(uint8_t masterBrightness, uint8_t effectCurrent, uint8_t effectSpeed, uint8_t effectIntensity, uint8_t effectPalette, uint8_t effectOption,
                    uint8_t r1, uint8_t g1, uint8_t b1, uint8_t r2, uint8_t g2, uint8_t b2, uint8_t r3, uint8_t g3, uint8_t b3)
     {
-        // this loop is mostly copy&paste from e131.cpp
+        //  DEBUG_PRINTF("set effect: %i %i %i %i %i %i %i %i %i \n", masterBrightness, effectCurrent, effectSpeed, effectIntensity,
+        //               effectPalette, effectOption, r1, g1, b1);
+        //  this loop is mostly copy&paste from e131.cpp
+        fadeTransition = false;
+        transitionDelay = 0;
         for (uint8_t id = 0; id < strip.getSegmentsNum(); id++)
         {
+            // DEBUG_PRINTF("Segment: %i\n", id);
             Segment &seg = strip.getSegment(id);
 
             const uint8_t mode = std::min(strip.getModeCount(), effectCurrent);
-            seg.setMode(mode);
+            if (seg.mode != mode)
+            {
+                seg.setMode(mode);
+            }
             seg.speed = effectSpeed;
             seg.intensity = effectIntensity;
-            seg.setPalette(effectPalette);
-
+            if (seg.palette != effectPalette)
+            {
+                seg.setPalette(effectPalette);
+            }
             const uint8_t segOption = (uint8_t)floor(effectOption / 64.0);
             if (segOption == 0 && (seg.mirror || seg.reverse))
             {
@@ -288,14 +310,21 @@ public:
             }
 
             // all segments are always fully visible
-            seg.setOpacity(255);
+            if (seg.opacity != 255)
+            {
+                seg.setOpacity(255);
+            }
         }
-        bri = masterBrightness;
-        strip.setBrightness(bri, true);
+        if (bri != masterBrightness)
+        {
+            bri = masterBrightness;
+            strip.setBrightness(bri, true);
+        }
 
         // TODO not sure if I still need this?
         // transitionDelayTemp = 0;              // act fast
-        // colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP
+        // colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP#
+        // DEBUG_PRINTF("SET EFFECT END\n");
     }
 
     void addToConfig(JsonObject &root)
@@ -413,7 +442,9 @@ void dmxReceiverTask(void *)
     rdm_client_set_start_address_changed_cb(DMX_NUM_2, [](uint16_t newAddr)
                                             { dmxReceiveParams.rdmDmx->updateDmxAddr(newAddr); });
     rdm_client_set_notify_cb(DMX_NUM_2, [](bool identify)
-                             { dmxReceiveParams.rdmDmx->setIdentify(identify); });
+                             { 
+                                // DEBUG_PRINTF("Ident: %i\n", identify);
+                                dmxReceiveParams.rdmDmx->setIdentify(identify); });
 
     initPersonalities();
     dmxReceiveParams.threadRunning = true;
