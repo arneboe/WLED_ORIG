@@ -57,7 +57,7 @@
 #endif
 
 /* Not used in all effects yet */
-#define WLED_FPS         42
+#define WLED_FPS         120
 #define FRAMETIME_FIXED  (1000/WLED_FPS)
 //#define FRAMETIME        _frametime
 #define FRAMETIME        strip.getFrameTime()
