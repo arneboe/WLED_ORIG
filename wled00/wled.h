@@ -331,7 +331,7 @@ WLED_GLOBAL byte briS     _INIT(128);                     // default brightness
 WLED_GLOBAL byte nightlightTargetBri _INIT(0);      // brightness after nightlight is over
 WLED_GLOBAL byte nightlightDelayMins _INIT(60);
 WLED_GLOBAL byte nightlightMode      _INIT(NL_MODE_FADE); // See const.h for available modes. Was nightlightFade
-WLED_GLOBAL bool fadeTransition      _INIT(true);   // enable crossfading color transition
+WLED_GLOBAL bool fadeTransition      _INIT(false);   // enable crossfading color transition
 WLED_GLOBAL uint16_t transitionDelay _INIT(750);    // default crossfade duration in ms
 
 WLED_GLOBAL byte briMultiplier _INIT(100);          // % of brightness to set (to limit power, if you set it to 50 and set bri to 255, actual brightness will be 127)

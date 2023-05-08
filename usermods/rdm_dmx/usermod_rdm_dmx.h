@@ -55,6 +55,7 @@ public:
 
     unsigned long lastDmxPacket = 0;
     bool noDmx = true;
+    uint8_t strobe = 0;
 
     void setup()
     {
@@ -77,7 +78,7 @@ public:
         dmxReceiveParams.numPixels = strip.getLengthTotal();
         // the default personality will get id 1.
         dmxReceiveParams.defaultPersonalityName = "WLED Mode";
-        dmxReceiveParams.defaultPersonalityFootprint = 16;
+        dmxReceiveParams.defaultPersonalityFootprint = 17;
 
         dmxRcvTaskHandle = NULL;
 
@@ -137,9 +138,9 @@ public:
         dmxReceiveParams.numPixels = strip.getLengthTotal();
         if (dmxReceiveParams.numPixels != strip.getLengthTotal())
         {
-            // TODO
-            // num pixels has changed, re-calculate personalities
+            // num pixels has changed, we need to re-calculate the personalities (just reset the chip for now)
             ESP_LOGE("RdmDmx", "num pixels has changed. please restart to calculate correct personalities");
+            ESP.restart();
         }
 
         updateEffect();
@@ -159,32 +160,97 @@ public:
         xTaskNotifyIndexed(dmxSendTaskHandle, 0, dmxData[dmxAddr], eSetValueWithOverwrite);
     }
 
+    /// @brief sets brightness but honors strobe channel
+    /// @return true if brightness changed
+    bool setBrightness(uint8_t brightness)
+    {
+        // how long the strobe-on flash is
+        static const float strobeOnTime = 0.008f;
+        const float currentTime = millis() / 1000.0f;
+        static float lastTime = currentTime;
+        static bool strobeOn = false;
+
+        if (strobe > 0)
+        {
+            if (strobeOn)
+            {
+                const float timeSinceOn = currentTime - lastTime;
+                if (timeSinceOn > strobeOnTime)
+                {
+                    strobeOn = false;
+                    bri = 0;
+                    strip.setBrightness(0, true);
+                    lastTime = currentTime;
+                    return true;
+                }
+            }
+            else
+            {
+                // strobe is always at least 1 when we are in this case
+                const float strobeOffTime = (255 - strobe) * 0.01f;
+                const float timeSinceOff = currentTime - lastTime;
+                if (timeSinceOff > strobeOffTime)
+                {
+                    strobeOn = true;
+                    bri = brightness;
+                    strip.setBrightness(brightness, true);
+                    lastTime = currentTime;
+                    return true;
+                }
+            }
+        }
+        else
+        {
+            if (brightness != strip.getBrightness())
+            {
+                bri = brightness; // need to set the global bri aswell for wled internals to work
+                strip.setBrightness(brightness, true);
+                return true;
+            }
+        }
+        return false;
+    }
+
     void updateEffect()
     {
+        if (noDmx)
+        {
+            strobe = 0;
+            setBrightness(0);
+            return;
+        }
+
         if (identify)
         {
-            // DEBUG_PRINTF("IDENTIFY\n");
+            strobe = 0;
             setEffect(255, 2, 128, 255, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0);
+            return;
         }
-        // disable leds if we have not seen dmx signals for some time
-        else if (noDmx)
-        {
-            bri = 0;
-            strip.setBrightness(0, true);
-        }
-        else if (personality == 0) // WLED effect mode
+
+        strobe = dmxData[dmxAddr + 1];
+
+        if (personality == 0) // WLED effect mode
         {
             // 15 channels [bri,effectCurrent,effectSpeed,effectIntensity,effectPalette,effectOption,R,G,B,R2,G2,B2,R3,G3,B3]
             const int numEffectChannels = 15;
             const int maxAddr = 513 - numEffectChannels;
-            const uint16_t addr = std::min(maxAddr, dmxAddr + 1); //+ 1 because 0 is blinder dimmer channel
+            const uint16_t addr = std::min(maxAddr, dmxAddr + 2); // +2 because 0=blinder, 1=strobe
             const uint8_t *data = &dmxData[addr];
 
             realtimeMode = REALTIME_MODE_INACTIVE; // TODO check if still need
-            fadeTransition = false;                // fade should be done by the operator
 
-            setEffect(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
-                      data[8], data[9], data[10], data[11], data[12], data[13], data[14]);
+            // static color fx is not a real fx, it is handled somehow differently in wled (this breaks our strobe)
+            // we implement it ourselfs...
+            if (data[0] == FX_MODE_STATIC)
+            {
+                fxStatic(data[0], data[6], data[7], data[8]);
+            }
+            else
+            {
+
+                setEffect(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
+                          data[8], data[9], data[10], data[11], data[12], data[13], data[14]);
+            }
         }
         else if (personality > 0)
         {
@@ -192,12 +258,28 @@ public:
         }
     }
 
+    void fxStatic(uint8_t brightness, uint8_t r, uint8_t g, uint8_t b)
+    {
+        const uint16_t numPixels = strip.getLengthTotal();
+
+        setBrightness(brightness);
+
+        for (uint16_t i = 0; i < numPixels; ++i)
+        {
+            const uint8_t gr = gamma8(r);
+            const uint8_t gg = gamma8(g);
+            const uint8_t gb = gamma8(b);
+
+            strip.setPixelColor(i, gr, gg, gb, 0);
+        }
+
+        strip.show();
+    }
+
     void pixelMapping()
     {
 
         // DEBUG_PRINTF("map\n");
-        // TODO reimplement with new wled api.
-        //      see how e131 does it!
 
         // FIXMe implement getFootprint instead
         const uint8_t groupPixels = personality;
@@ -205,44 +287,31 @@ public:
         // const uint16_t footprint = numPixelsGrouped * 3;
 
         const uint16_t numPixels = strip.getLengthTotal();
-        // DEBUG_PRINTF("numpix: %i\n", numPixels);
-        uint16_t addr = dmxAddr + 1;
+        uint16_t addr = dmxAddr + 2; // +2 because 0=blinder, 1=strobe
         uint8_t currentGrpPixel = 1;
 
-        if (noDmx)
-        {
-            for (uint16_t i = 0; i < numPixels; ++i)
-            {
-                // FIXME IRAM_ATTR is missing now in setPixelColor. see if still works
-                strip.setPixelColor(i, 0, 0, 0, 0);
-            }
-        }
-        else
-        {
-            if(strip.getBrightness() != 255)
-            {
-                strip.setBrightness(255, true);
-            }
-            for (uint16_t i = 0; i < numPixels; ++i)
-            {
-                const uint8_t r = gamma8(dmxData[addr]);
-                const uint8_t g = gamma8(dmxData[addr + 1]);
-                const uint8_t b = gamma8(dmxData[addr + 2]);
+        setBrightness(255);
 
-                strip.setPixelColor(i, r, g, b, 0);
-                currentGrpPixel++;
+        for (uint16_t i = 0; i < numPixels; ++i)
+        {
+            const uint8_t r = gamma8(dmxData[addr]);
+            const uint8_t g = gamma8(dmxData[addr + 1]);
+            const uint8_t b = gamma8(dmxData[addr + 2]);
 
-                if (currentGrpPixel > groupPixels)
-                {
-                    addr += 3;
-                    currentGrpPixel = 1;
-                    if (addr > 510)
-                    { // FIXME calculate beforehand
-                        break;
-                    }
+            strip.setPixelColor(i, r, g, b, 0);
+            currentGrpPixel++;
+
+            if (currentGrpPixel > groupPixels)
+            {
+                addr += 3;
+                currentGrpPixel = 1;
+                if (addr > 510)
+                { // FIXME calculate beforehand
+                    break;
                 }
             }
         }
+
         strip.show();
     }
 
@@ -252,8 +321,8 @@ public:
         //  DEBUG_PRINTF("set effect: %i %i %i %i %i %i %i %i %i \n", masterBrightness, effectCurrent, effectSpeed, effectIntensity,
         //               effectPalette, effectOption, r1, g1, b1);
         //  this loop is mostly copy&paste from e131.cpp
-        fadeTransition = false;
-        transitionDelay = 0;
+
+        bool changed = false;
         for (uint8_t id = 0; id < strip.getSegmentsNum(); id++)
         {
             // DEBUG_PRINTF("Segment: %i\n", id);
@@ -263,33 +332,47 @@ public:
             if (seg.mode != mode)
             {
                 seg.setMode(mode);
+                changed = true;
             }
-            seg.speed = effectSpeed;
-            seg.intensity = effectIntensity;
+            if (seg.speed != effectSpeed)
+            {
+                seg.speed = effectSpeed;
+                changed = true;
+            }
+            if (seg.intensity != effectIntensity)
+            {
+                seg.intensity = effectIntensity;
+                changed = true;
+            }
             if (seg.palette != effectPalette)
             {
                 seg.setPalette(effectPalette);
+                changed = true;
             }
             const uint8_t segOption = (uint8_t)floor(effectOption / 64.0);
             if (segOption == 0 && (seg.mirror || seg.reverse))
             {
                 seg.setOption(SEG_OPTION_MIRROR, false);
                 seg.setOption(SEG_OPTION_REVERSED, false);
+                changed = true;
             }
             if (segOption == 1 && (seg.mirror || !seg.reverse))
             {
                 seg.setOption(SEG_OPTION_MIRROR, false);
                 seg.setOption(SEG_OPTION_REVERSED, true);
+                changed = true;
             }
             if (segOption == 2 && (!seg.mirror || seg.reverse))
             {
                 seg.setOption(SEG_OPTION_MIRROR, true);
                 seg.setOption(SEG_OPTION_REVERSED, false);
+                changed = true;
             }
             if (segOption == 3 && (!seg.mirror || !seg.reverse))
             {
                 seg.setOption(SEG_OPTION_MIRROR, true);
                 seg.setOption(SEG_OPTION_REVERSED, true);
+                changed = true;
             }
 
             uint32_t colors[3];
@@ -299,32 +382,38 @@ public:
             if (colors[0] != seg.colors[0])
             {
                 seg.setColor(0, colors[0]);
+                changed = true;
             }
             if (colors[1] != seg.colors[1])
             {
                 seg.setColor(1, colors[1]);
+                changed = true;
             }
             if (colors[2] != seg.colors[2])
             {
                 seg.setColor(2, colors[2]);
+                changed = true;
             }
 
             // all segments are always fully visible
             if (seg.opacity != 255)
             {
                 seg.setOpacity(255);
+                changed = true;
             }
         }
-        if (bri != masterBrightness)
+
+        changed |= setBrightness(masterBrightness);
+
+        if (changed)
         {
-            bri = masterBrightness;
-            strip.setBrightness(bri, true);
+            fadeTransition = false;
+            transitionDelay = 0;
+            transitionDelayTemp = 0;
+            stateUpdated(CALL_MODE_NOTIFICATION);
         }
 
-        // TODO not sure if I still need this?
-        // transitionDelayTemp = 0;              // act fast
-        // colorUpdated(CALL_MODE_NOTIFICATION); // don't send UDP#
-        // DEBUG_PRINTF("SET EFFECT END\n");
+        // TODO _targetFps???
     }
 
     void addToConfig(JsonObject &root)
@@ -384,8 +473,8 @@ void initPersonalities()
             ESP_LOGE(TAG, "dmx error: Too many pixels for footprint %d. Skipping...", divisor);
             continue;
         }
-        //+ 1 because first channel is dimmer
-        rdm_client_add_personality(DMX_NUM_2, footprint + 1, ("Pixmap (grp " + std::to_string(divisor) + ")").c_str());
+        // +2 because 0=blinder, 1=strobe
+        rdm_client_add_personality(DMX_NUM_2, footprint + 2, ("Pixmap (grp " + std::to_string(divisor) + ")").c_str());
     }
 
     rdm_client_set_personality(DMX_NUM_2, dmxReceiveParams.rdmDmx->personality + 1); //+1 because rmd is 1-based
@@ -394,9 +483,9 @@ void initPersonalities()
                                           { dmxReceiveParams.rdmDmx->personalityChanged(personality); });
 }
 
+/// This task forwards the dimmer data to the external dimmer
 void dmxSendTask(void *)
 {
-
     const uint8_t TX_PIN = 32; // the pin we are using to TX with
     const uint8_t RX_PIN = 33; // the pin we are using to RX with
     const uint8_t EN_PIN = 19; // the pin we are using to enable TX on the DMX transceiver
