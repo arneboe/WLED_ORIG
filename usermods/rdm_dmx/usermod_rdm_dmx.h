@@ -167,7 +167,7 @@ public:
         // how long the strobe-on flash is
         static const float strobeOnTime = 0.008f;
         const float currentTime = millis() / 1000.0f;
-        static float lastTime = currentTime;
+        static float lastTime = currentTime; //<< static!!!
         static bool strobeOn = false;
 
         if (strobe > 0)
@@ -412,8 +412,6 @@ public:
             transitionDelayTemp = 0;
             stateUpdated(CALL_MODE_NOTIFICATION);
         }
-
-        // TODO _targetFps???
     }
 
     void addToConfig(JsonObject &root)
