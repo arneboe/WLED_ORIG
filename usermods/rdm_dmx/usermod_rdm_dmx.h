@@ -37,6 +37,7 @@ public:
     std::atomic<int> dmxAddrByRdm;
     int dmxAddrByConfig;
     std::atomic<bool> identify = false;
+    bool oldIdentify = false;
     TaskHandle_t dmxRcvTaskHandle;
     TaskHandle_t dmxSendTaskHandle;
 
@@ -54,7 +55,6 @@ public:
     uint8_t dmxData[513] = {0};
 
     unsigned long lastDmxPacket = 0;
-    bool noDmx = true;
     uint8_t strobe = 0;
 
     void setup()
@@ -97,12 +97,8 @@ public:
         }
     }
 
-    void loop()
+    void checkConfigChanges()
     {
-        if (!dmxReceiveParams.threadRunning)
-        {
-            return;
-        }
         if (dmxAddrByRdm != dmxAddr)
         {
             dmxAddr = dmxAddrByRdm;
@@ -116,7 +112,6 @@ public:
             dmxAddrByRdm = dmxAddrByConfig;
             rdm_client_set_start_address(DMX_NUM_2, dmxAddr);
         }
-
         // web interface changed personality, update rdm
         if (personality != personalityByConfig)
         {
@@ -133,8 +128,6 @@ public:
             serializeConfig();
         }
 
-        noDmx = millis() - lastDmxPacket > 2000;
-
         dmxReceiveParams.numPixels = strip.getLengthTotal();
         if (dmxReceiveParams.numPixels != strip.getLengthTotal())
         {
@@ -142,17 +135,42 @@ public:
             ESP_LOGE("RdmDmx", "num pixels has changed. please restart to calculate correct personalities");
             ESP.restart();
         }
-
-        updateEffect();
     }
 
-    void handleOverlayDraw() override
+    void loop()
     {
-        // DO not use. update rate depends on selected effect!
-        // If you set effect 0 (solid) this will never be called again
+        if (!dmxReceiveParams.threadRunning)
+        {
+            return;
+        }
+        checkConfigChanges();
+
+        if (identify)
+        {
+            oldIdentify = true;
+            strobe = 0;
+            setEffect(255, 2, 128, 255, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0);
+            return;
+        }
+        else if(oldIdentify)
+        {
+            oldIdentify = false;
+            setBrightness(0); //turn it back off, even if dmx is not connected
+        }
+
+        // dmx timeout
+        if (millis() - lastDmxPacket < 2000)
+        {
+            updateEffect();
+        }
+        else
+        {
+            // dimmer will be disabled once dmxSendTask timeouts (after 1 sec)
+            // leds will remain in their last state
+        }
     }
 
-    // notify that new data has been received
+    /// notify that new data has been received
     void newDmxData()
     {
         lastDmxPacket = millis();
@@ -213,19 +231,6 @@ public:
 
     void updateEffect()
     {
-        if (noDmx)
-        {
-            strobe = 0;
-            setBrightness(0);
-            return;
-        }
-
-        if (identify)
-        {
-            strobe = 0;
-            setEffect(255, 2, 128, 255, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 0);
-            return;
-        }
 
         strobe = dmxData[dmxAddr + 1];
 
