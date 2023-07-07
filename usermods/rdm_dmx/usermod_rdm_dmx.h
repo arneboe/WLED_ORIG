@@ -246,6 +246,7 @@ public:
 
             // static color fx is not a real fx, it is handled somehow differently in wled (this breaks our strobe)
             // we implement it ourselfs...
+            // TODO not sure if I really need this anymore
             if (data[0] == FX_MODE_STATIC)
             {
                 fxStatic(data[0], data[6], data[7], data[8]);
@@ -337,6 +338,10 @@ public:
             if (seg.mode != mode)
             {
                 seg.setMode(mode);
+                // When running several esps in a large installation, their time drifts apart significantly.
+                // To get synchronized effects in that case, we reset the time every time the effect changes.
+                // This can be used by the dmx controller to synchronize severeal esps.
+                strip.resetTime();
                 changed = true;
             }
             if (seg.speed != effectSpeed)

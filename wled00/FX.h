@@ -656,6 +656,7 @@ class WS2812FX {  // 96 bytes
       currentMilliamps(0),
       now(millis()),
       timebase(0),
+      currentTime(0),
       isMatrix(false),
 #ifndef WLED_DISABLE_2D
       panels(1),
@@ -711,6 +712,8 @@ class WS2812FX {  // 96 bytes
 #endif
     void finalizeInit();
     void service(void);
+    void resetTime();
+    uint32_t getCurrentTime();
     void setMode(uint8_t segid, uint8_t m);
     void setColor(uint8_t slot, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0);
     void setColor(uint8_t slot, uint32_t c);
@@ -789,6 +792,10 @@ class WS2812FX {  // 96 bytes
       timebase,
       currentColor(uint32_t colorNew, uint8_t tNr),
       getPixelColor(uint16_t);
+
+    // is used in resetTime to reset the time.
+    // if this value is != to 0, the next call to service will update now to this value
+    uint32_t currentTime;
 
     inline uint32_t getLastShow(void) { return _lastShow; }
     inline uint32_t segColor(uint8_t i) { return _colors_t[i]; }

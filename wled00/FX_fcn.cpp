@@ -1040,8 +1040,24 @@ void WS2812FX::finalizeInit(void)
   deserializeMap();     // (re)load default ledmap
 }
 
+
+void WS2812FX::resetTime()
+{
+  currentTime = 0;
+}
+
+uint32_t WS2812FX::getCurrentTime()
+{
+  static uint32_t lastMillis = millis();
+  const uint32_t currentMillis = millis(); // Be aware, millis() rolls over every 49 days
+  const uint32_t diff = currentMillis - lastMillis;
+  lastMillis = currentMillis;
+  currentTime += diff;
+  return currentTime;
+}
+
 void WS2812FX::service() {
-  uint32_t nowUp = millis(); // Be aware, millis() rolls over every 49 days
+  const uint32_t nowUp = getCurrentTime();
   now = nowUp + timebase;
   if (nowUp - _lastShow < MIN_SHOW_DELAY) return;
   bool doShow = false;
