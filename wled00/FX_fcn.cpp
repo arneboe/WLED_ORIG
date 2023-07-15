@@ -1041,9 +1041,9 @@ void WS2812FX::finalizeInit(void)
 }
 
 
-void WS2812FX::resetTime()
+void WS2812FX::resetTime(uint32_t time)
 {
-  currentTime = 0;
+  currentTime = time;
 }
 
 uint32_t WS2812FX::getCurrentTime()

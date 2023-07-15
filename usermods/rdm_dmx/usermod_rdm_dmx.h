@@ -341,7 +341,13 @@ public:
                 // When running several esps in a large installation, their time drifts apart significantly.
                 // To get synchronized effects in that case, we reset the time every time the effect changes.
                 // This can be used by the dmx controller to synchronize severeal esps.
-                strip.resetTime();
+
+                //all esps receive the dmx packet at the same time. But the setEffect function
+                //is called at different times.
+                //We want to reset the time to the point where the dmx packet was received
+                const unsigned long currentTime = millis();
+                const unsigned long diff = currentTime - lastDmxPacket;
+                strip.resetTime(diff);
                 changed = true;
             }
             if (seg.speed != effectSpeed)

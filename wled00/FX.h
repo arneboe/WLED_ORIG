@@ -712,7 +712,7 @@ class WS2812FX {  // 96 bytes
 #endif
     void finalizeInit();
     void service(void);
-    void resetTime();
+    void resetTime(uint32_t time);
     uint32_t getCurrentTime();
     void setMode(uint8_t segid, uint8_t m);
     void setColor(uint8_t slot, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0);
