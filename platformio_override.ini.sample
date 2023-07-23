@@ -17,7 +17,7 @@ build_unflags = ${common.build_unflags}
 build_flags = ${common.build_flags_esp8266}
 ; *********************************************************************
 ; *** Use custom settings from file my_config.h
-   -DWLED_USE_MY_CONFIG
+   -DWLED_USE_MY_CONFIG>
 ; *********************************************************************
 ;
 ;

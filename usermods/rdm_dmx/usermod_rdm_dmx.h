@@ -89,12 +89,12 @@ public:
             ESP_LOGE("RdmDmx", "Failed to create dmx rcv task");
         }
 
-        dmxSendTaskHandle = NULL;
-        xTaskCreatePinnedToCore(dmxSendTask, "DMX_SEND_TASK", 10240, nullptr, 2, &dmxSendTaskHandle, 0);
-        if (!dmxSendTaskHandle)
-        {
-            ESP_LOGE("RdmDmx", "Failed to create dmx send task");
-        }
+        // dmxSendTaskHandle = NULL;
+        // xTaskCreatePinnedToCore(dmxSendTask, "DMX_SEND_TASK", 10240, nullptr, 2, &dmxSendTaskHandle, 0);
+        // if (!dmxSendTaskHandle)
+        // {
+        //     ESP_LOGE("RdmDmx", "Failed to create dmx send task");
+        // }
     }
 
     void checkConfigChanges()
@@ -175,7 +175,7 @@ public:
     {
         lastDmxPacket = millis();
         // send new dimmer value to dmx task and wake the task up
-        xTaskNotifyIndexed(dmxSendTaskHandle, 0, dmxData[dmxAddr], eSetValueWithOverwrite);
+        // xTaskNotifyIndexed(dmxSendTaskHandle, 0, dmxData[dmxAddr], eSetValueWithOverwrite);
     }
 
     /// @brief sets brightness but honors strobe channel
@@ -455,7 +455,7 @@ public:
     {
         JsonObject top = root["dmx_rdm_mod"];
         bool configComplete = !top.isNull();
-        configComplete &= getJsonValue(top["dmx_addr"], dmxAddrByConfig, 42);
+        configComplete &= getJsonValue(top["dmx_addr"], dmxAddrByConfig, 1);
         configComplete &= getJsonValue(top["personality"], personalityByConfig, 0);
 
         return configComplete;
