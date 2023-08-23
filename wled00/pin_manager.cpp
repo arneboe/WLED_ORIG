@@ -46,6 +46,7 @@ String PinManagerClass::getOwnerText(PinOwner tag) {
     case PinOwner::HW_I2C     : return(F("I2C (hw)")); break;            // 'I2C'  == hardware I2C pins (4&5 on ESP8266, 21&22 on ESP32)
     case PinOwner::HW_SPI     : return(F("SPI (hw)")); break;            // 'SPI'  == hardware (V)SPI pins (13,14&15 on ESP8266, 5,18&23 on ESP32)
     case PinOwner::DMX_INPUT  : return(F("DMX Input")); break;            
+    case PinOwner::DMX_OUTPUT : return(F("DMX Output")); break;            
 
     case PinOwner::UM_Audioreactive     : return(F("AudioReactive (UM)")); break;     // audioreative usermod - analog or digital audio input
     case PinOwner::UM_Temperature       : return(F("Temperature (UM)")); break;       // "usermod_temperature.h"
@@ -444,7 +445,7 @@ bool PinManagerClass::allocatePin(byte gpio, bool output, PinOwner tag)
   // HW I2C & SPI pins have to be allocated using allocateMultiplePins variant since there is always SCL/SDA pair
   // DMX_INPUT pins have to be allocated using allocateMultiplePins variant since there is always RX/TX/EN triple
   if (!isPinOk(gpio, output) || (gpio >= WLED_NUM_PINS) || tag==PinOwner::HW_I2C || tag==PinOwner::HW_SPI
-      || tag==PinOwner::DMX_INPUT) {
+      || tag==PinOwner::DMX_INPUT || tag==PinOwner::DMX_OUTPUT) {
     #ifdef WLED_DEBUG
     if (gpio < 255) {  // 255 (-1) is the "not defined GPIO"
       if (!isPinOk(gpio, output)) {

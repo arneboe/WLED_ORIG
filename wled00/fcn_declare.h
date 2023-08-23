@@ -72,6 +72,8 @@ uint8_t unGamma8(uint8_t value);                                                
 //dmx_output.cpp
 void initDMXOutput();
 void handleDMXOutput();
+void dmxWrite(uint16_t addr, uint8_t data);
+void dmxSend();
 
 //dmx_input.cpp
 void initDMXInput();
