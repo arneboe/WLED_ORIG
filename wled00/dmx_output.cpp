@@ -30,6 +30,8 @@ static bool dmxOutputInitialized = false;
 
 void dmxWrite(uint16_t addr, uint8_t data)
 {
+  if (!dmxOutputInitialized)
+    return;
 #ifdef ESP8266
   dmx.write(addr, data);
 #else
@@ -39,6 +41,8 @@ void dmxWrite(uint16_t addr, uint8_t data)
 
 void dmxSend()
 {
+  if (!dmxOutputInitialized)
+    return;
 #ifdef ESP8266
   dmx.update();
 #else
@@ -112,6 +116,7 @@ void handleDMXOutput()
 void initDMXOutput()
 {
 #ifdef ESP8266
+  pinManager.allocatePin(2, true, PinOwner::DMX);
   dmx.init(512); // initialize with bus length
   dmxOutputInitialized = true;
 #else

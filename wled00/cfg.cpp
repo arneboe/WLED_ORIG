@@ -467,6 +467,12 @@ bool deserializeConfig(JsonObject doc, bool fromFS) {
     CJSON(dmxInputEnablePin, if_live_dmx[F("inputEnablePin")]);
   #endif
 
+  #ifdef WLED_ENABLE_DMX_OUTPUT
+    CJSON(dmxOutputTransmitPin, if_live_dmx[F("outputRxPin")]);
+    CJSON(dmxOutputReceivePin, if_live_dmx[F("outputTxPin")]);
+    CJSON(dmxOutputEnablePin, if_live_dmx[F("outputEnablePin")]);
+  #endif
+
   CJSON(arlsForceMaxBri, if_live[F("maxbri")]);
   CJSON(arlsDisableGammaCorrection, if_live[F("no-gc")]); // false
   CJSON(arlsOffset, if_live[F("offset")]); // 0
@@ -951,6 +957,12 @@ void serializeConfig() {
     if_live_dmx[F("inputTxPin")] = dmxInputReceivePin;
     if_live_dmx[F("inputEnablePin")] = dmxInputEnablePin;
   #endif
+  #ifdef WLED_ENABLE_DMX_OUTPUT
+    if_live_dmx[F("outputRxPin")] = dmxOutputTransmitPin;
+    if_live_dmx[F("outputTxPin")] = dmxOutputReceivePin;
+    if_live_dmx[F("outputEnablePin")] = dmxOutputEnablePin;
+  #endif
+
 
   if_live[F("timeout")] = realtimeTimeoutMs / 100;
   if_live[F("maxbri")] = arlsForceMaxBri;

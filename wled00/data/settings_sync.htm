@@ -9,7 +9,7 @@
 	var loc = false, locip;
 	function gId(s){return d.getElementById(s);}
 	function toggle(el){gId(el).classList.toggle("hide"); gId('No'+el).classList.toggle("hide");}
-	function hideNoDMX(){gId("dmxOnOff2").style.display="none";} //WLEDMM
+	function hideNoDMX(){gId("dmxOutputOff").style.display="none";} //WLEDMM
 	function hideNoLOX(){gId("loxOnOff2").style.display="none";} //WLEDMM
 	function hideNoADA(){gId("adaOnOff2").style.display="none";} //WLEDMM
 	function hideDMXInput(){gId("dmxInput").style.display="none";} //WLEDMM
@@ -184,7 +184,14 @@ Realtime LED offset: <input name="WO" type="number" min="-255" max="255" require
 <div id="dmxInputOff"> <!--WLEDMM-->
 	<br><em style="color:darkorange">This firmware build does not include DMX Input support. <br></em>
 </div> 
-<div id="dmxOnOff2"> <!--WLEDMM-->
+<div id="dmxOutput"> <!--WLEDMM-->
+	<em>DMX Output Pins</em><br/>
+	DMX RX: <input name="ODMR" type="number" min="-1" max="99"><br/>
+	DMX TX: <input name="ODMT" type="number" min="-1" max="99"><br/>
+	DMX Enable: <input name="ODME" type="number" min="-1" max="99"><br/>
+	DMX Port: <input name="ODMP" type="number" min="1" max="2"><br/>
+</div> 
+<div id="dmxOutputOff"> <!--WLEDMM-->
   <br><em style="color:darkorange">This firmware build does not include DMX output support. <br></em>
 </div> 
 <hr class="sml">

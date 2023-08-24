@@ -364,6 +364,14 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     if(dmxInputPort <= 0 || dmxInputPort > 2) dmxInputPort = 2;
 #endif
 
+#ifdef WLED_ENABLE_DMX_OUTPUT
+    dmxOutputTransmitPin = request->arg(F("ODMT")).toInt();
+    dmxOutputReceivePin = request->arg(F("ODMR")).toInt();
+    dmxOutputEnablePin = request->arg(F("ODME")).toInt();
+    dmxOutputPort = request->arg(F("ODMP")).toInt();
+    if(dmxOutputPort <= 0 || dmxOutputPort > 2) dmxOutputPort = 1;    
+#endif
+
     alexaEnabled = request->hasArg(F("AL"));
     strlcpy(alexaInvocationName, request->arg(F("AI")).c_str(), 33);
     t = request->arg(F("AP")).toInt();
