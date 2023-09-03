@@ -2,6 +2,7 @@
 #include "wled.h"
 #include "wled_ethernet.h"
 #include <Arduino.h>
+#include "blinder.h"
 
 #if defined(ARDUINO_ARCH_ESP32) && defined(WLED_DISABLE_BROWNOUT_DET)
 #include "soc/soc.h"
@@ -701,6 +702,7 @@ void WLED::setup()
 #endif
 #ifdef WLED_ENABLE_DMX_INPUT
   dmxInput.init(dmxInputReceivePin, dmxInputTransmitPin, dmxInputEnablePin, dmxInputPort);
+  initBlinder();
 #endif
 
 #ifdef WLED_ENABLE_ADALIGHT

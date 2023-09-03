@@ -56,7 +56,8 @@ private:
   uint8_t enPin = 255;
 
   /// is written to by the dmx receive task.
-  byte dmxdata[DMX_PACKET_SIZE]; 
+  // +1 because we shift it later and need to avoid out of bounds access
+  byte dmxdata[DMX_PACKET_SIZE + 1]; //TODO add locking somehow? maybe double buffer?
   /// True once the dmx input has been initialized successfully
   bool initialized = false; // true once init finished successfully
   /// True if dmx is currently connected
