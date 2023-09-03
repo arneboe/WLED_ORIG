@@ -7,6 +7,7 @@
 #endif
 
 #include "dmx_input.h"
+#include "blinder.h"
 #include <rdm/responder.h>
 
 void rdmPersonalityChangedCb(dmx_port_t dmxPort, const rdm_header_t *header,
@@ -64,25 +65,25 @@ static dmx_config_t createConfig()
   config.software_version_label[32] = '\0'; // zero termination in case versionString string was longer than 32 chars
 
   config.personalities[0].description = "SINGLE_RGB";
-  config.personalities[0].footprint = 3;
+  config.personalities[0].footprint = 4;
   config.personalities[1].description = "SINGLE_DRGB";
-  config.personalities[1].footprint = 4;
+  config.personalities[1].footprint = 6;
   config.personalities[2].description = "EFFECT";
-  config.personalities[2].footprint = 15;
+  config.personalities[2].footprint = 16;
   config.personalities[3].description = "MULTIPLE_RGB";
-  config.personalities[3].footprint = std::min(512, int(strip.getLengthTotal()) * 3);
+  config.personalities[3].footprint = std::min(512, int(strip.getLengthTotal()) * 3 + 1);
   config.personalities[4].description = "MULTIPLE_DRGB";
-  config.personalities[4].footprint = std::min(512, int(strip.getLengthTotal()) * 3 + 1);
+  config.personalities[4].footprint = std::min(512, int(strip.getLengthTotal()) * 3 + 2);
   config.personalities[5].description = "MULTIPLE_RGBW";
-  config.personalities[5].footprint = std::min(512, int(strip.getLengthTotal()) * 4);
+  config.personalities[5].footprint = std::min(512, int(strip.getLengthTotal()) * 4 + 1);
   config.personalities[6].description = "EFFECT_W";
-  config.personalities[6].footprint = 18;
+  config.personalities[6].footprint = 19;
   config.personalities[7].description = "EFFECT_SEGMENT";
-  config.personalities[7].footprint = std::min(512, strip.getSegmentsNum() * 15);
+  config.personalities[7].footprint = std::min(512, strip.getSegmentsNum() * 15 + 1);
   config.personalities[8].description = "EFFECT_SEGMENT_W";
-  config.personalities[8].footprint = std::min(512, strip.getSegmentsNum() * 18);
+  config.personalities[8].footprint = std::min(512, strip.getSegmentsNum() * 18 + 1);
   config.personalities[9].description = "PRESET";
-  config.personalities[9].footprint = 1;
+  config.personalities[9].footprint = 2;
 
   config.personality_count = 10;
   // rdm personalities are numbered from 1, thus we can just set the DMXMode directly.
@@ -133,12 +134,12 @@ void DMXInput::init(uint8_t rxPin, uint8_t txPin, uint8_t enPin, uint8_t inputPo
 {
 
 #ifdef WLED_ENABLE_DMX_OUTPUT
-  //TODO add again once dmx output has been merged
-  // if(inputPortNum == dmxOutputPort)
-  // {
-  //   USER_PRINTF("DMXInput: Error: Input port == output port");
-  //   return;
-  // }
+  // TODO add again once dmx output has been merged
+  //  if(inputPortNum == dmxOutputPort)
+  //  {
+  //    USER_PRINTF("DMXInput: Error: Input port == output port");
+  //    return;
+  //  }
 #endif
 
   if (inputPortNum < 3 && inputPortNum > 0)
@@ -221,7 +222,6 @@ void DMXInput::updateInternal()
   }
 }
 
-
 void DMXInput::update()
 {
   if (identify)
@@ -231,7 +231,11 @@ void DMXInput::update()
   else if (connected)
   {
     const std::lock_guard<std::mutex> lock(dmxDataLock);
-    handleDMXData(1, 512, dmxdata, REALTIME_MODE_DMX, 0);
+    setBlinderBrightness(dmxdata[DMXAddress]);
+    // blinder: we move dmxdata one byte forward. This way we hack the blinder channel infront of the
+    //          dmx data but we can keep the dmx addr. This could lead to out of bounds access.
+    //          We have to ensure that that does not happen
+    handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
   }
 }
 
