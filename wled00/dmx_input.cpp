@@ -191,6 +191,8 @@ void DMXInput::updateInternal()
       if (!packet.is_rdm) {
         const std::lock_guard<std::mutex> lock(dmxDataLock);
         dmx_read(inputPortNum, dmxdata, packet.size);
+        //forward dimmer channel directly
+        setBlinderBrightness(dmxdata[DMXAddress]);
       }
     }
     else {
@@ -209,7 +211,6 @@ void DMXInput::update()
   }
   else if (connected) {
     const std::lock_guard<std::mutex> lock(dmxDataLock);
-    setBlinderBrightness(dmxdata[DMXAddress]);
     // blinder: we move dmxdata one byte forward. This way we hack the blinder channel infront of the
     //          dmx data but we can keep the dmx addr. This could lead to out of bounds access.
     //          We have to ensure that that does not happen
