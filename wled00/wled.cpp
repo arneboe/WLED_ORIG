@@ -701,8 +701,8 @@ void WLED::setup()
   initDMXOutput();
 #endif
 #ifdef WLED_ENABLE_DMX_INPUT
-  dmxInput.init(dmxInputReceivePin, dmxInputTransmitPin, dmxInputEnablePin, dmxInputPort);
   initBlinder();
+  dmxInput.init(dmxInputReceivePin, dmxInputTransmitPin, dmxInputEnablePin, dmxInputPort);
 #endif
 
 #ifdef WLED_ENABLE_ADALIGHT
