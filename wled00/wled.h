@@ -424,9 +424,20 @@ WLED_GLOBAL bool arlsForceMaxBri _INIT(false);                    // enable to f
 WLED_GLOBAL uint16_t e131ProxyUniverse _INIT(0);                  // output this E1.31 (sACN) / ArtNet universe via MAX485 (0 = disabled)
 #endif
 #ifdef WLED_ENABLE_DMX_INPUT
-  WLED_GLOBAL int dmxInputTransmitPin _INIT(0);
-  WLED_GLOBAL int dmxInputReceivePin _INIT(0);
-  WLED_GLOBAL int dmxInputEnablePin _INIT(0);
+
+  #ifndef WLED_DMX_INPUT_TX_PIN
+  #define WLED_DMX_INPUT_TX_PIN 0
+  #endif
+  #ifndef WLED_DMX_INPUT_RX_PIN
+  #define WLED_DMX_INPUT_RX_PIN 0
+  #endif
+  #ifndef WLED_DMX_INPUT_EN_PIN
+  #define WLED_DMX_INPUT_EN_PIN 0
+  #endif
+
+  WLED_GLOBAL int dmxInputTransmitPin _INIT(WLED_DMX_INPUT_TX_PIN);
+  WLED_GLOBAL int dmxInputReceivePin _INIT(WLED_DMX_INPUT_RX_PIN);
+  WLED_GLOBAL int dmxInputEnablePin _INIT(WLED_DMX_INPUT_EN_PIN);
   WLED_GLOBAL int dmxInputPort _INIT(2);
   WLED_GLOBAL DMXInput dmxInput;
 #endif
@@ -435,7 +446,7 @@ WLED_GLOBAL uint16_t e131Universe _INIT(1);                       // settings fo
 WLED_GLOBAL uint16_t e131Port _INIT(5568);                        // DMX in port. E1.31 default is 5568, Art-Net is 6454
 WLED_GLOBAL byte e131Priority _INIT(0);                           // E1.31 port priority (if != 0 priority handling is active)
 WLED_GLOBAL E131Priority highPriority _INIT(3);                   // E1.31 highest priority tracking, init = timeout in seconds
-WLED_GLOBAL byte DMXMode _INIT(DMX_MODE_MULTIPLE_RGB);            // DMX mode (s.a.)
+WLED_GLOBAL byte DMXMode _INIT(DMX_MODE_EFFECT);                  // DMX mode (s.a.)
 WLED_GLOBAL uint16_t DMXAddress _INIT(1);                         // DMX start address of fixture, a.k.a. first Channel [for E1.31 (sACN) protocol]
 WLED_GLOBAL uint16_t DMXSegmentSpacing _INIT(0);                  // Number of void/unused channels between each segments DMX channels
 WLED_GLOBAL byte e131LastSequenceNumber[E131_MAX_UNIVERSE_COUNT]; // to detect packet loss
