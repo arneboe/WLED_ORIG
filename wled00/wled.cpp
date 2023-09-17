@@ -828,8 +828,9 @@ void WLED::initAP(bool resetAP)
     WLED_SET_AP_SSID();
     strcpy_P(apPass, PSTR(WLED_AP_PASS));
   }
-  USER_PRINT(F("Opening access point "));  // WLEDMM
+  USER_PRINTLN("Opening access point ");  // WLEDMM
   USER_PRINTLN(apSSID);                    // WLEDMM
+  USER_PRINTLN(apPass);                    // WLEDMM
   WiFi.softAPConfig(IPAddress(4, 3, 2, 1), IPAddress(4, 3, 2, 1), IPAddress(255, 255, 255, 0));
   WiFi.softAP(apSSID, apPass, apChannel, apHide);
   #if defined(LOLIN_WIFI_FIX) && (defined(ARDUINO_ARCH_ESP32C3) || defined(ARDUINO_ARCH_ESP32S2) || defined(ARDUINO_ARCH_ESP32S3))

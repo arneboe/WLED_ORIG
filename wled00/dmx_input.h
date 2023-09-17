@@ -46,18 +46,25 @@ private:
   friend void rdmPersonalityChangedCb(dmx_port_t dmxPort, const rdm_header_t *header,
                                       void *context);
 
+  // invoked whenever the user wants to enable/disable wifi via rdm
+  friend void wifiStateChangedCb(dmx_port_t dmxPort, const rdm_header_t *header,
+                                 void *context);
+
   /// The internal dmx task.
   /// This is the main loop of the dmx receiver. It never returns.
-  friend void dmxReceiverTask(void * context);
+  friend void dmxReceiverTask(void *context);
 
-  uint8_t inputPortNum = 255; 
+  uint8_t inputPortNum = 255;
   uint8_t rxPin = 255;
   uint8_t txPin = 255;
   uint8_t enPin = 255;
 
+  //contains the wifi state for rdm
+  uint8_t wifiState;
+
   /// is written to by the dmx receive task.
   // +1 because we shift it later and need to avoid out of bounds access
-  byte dmxdata[DMX_PACKET_SIZE + 1]; //TODO add locking somehow? maybe double buffer?
+  byte dmxdata[DMX_PACKET_SIZE + 1]; // TODO add locking somehow? maybe double buffer?
   /// True once the dmx input has been initialized successfully
   bool initialized = false; // true once init finished successfully
   /// True if dmx is currently connected
@@ -66,9 +73,8 @@ private:
   /// Timestamp of the last time a dmx frame was received
   unsigned long lastUpdate = 0;
 
-  /// Taskhandle of the dmx task that is running in the background 
+  /// Taskhandle of the dmx task that is running in the background
   TaskHandle_t task;
   /// Guards access to dmxData
   std::mutex dmxDataLock;
-  
 };
