@@ -10,6 +10,55 @@
 #include "blinder.h"
 #include <rdm/responder.h>
 
+static void enabledWifi()
+{
+  apBehavior = AP_BEHAVIOR_ALWAYS;
+}
+
+static void disableWifi()
+{
+  apBehavior = AP_BEHAVIOR_BUTTON_ONLY;
+}
+
+void wifiStateChangedCb(dmx_port_t dmxPort, const rdm_header_t *header,
+                        void *context)
+{
+  if (header->cc == RDM_CC_SET_COMMAND_RESPONSE)
+  {
+    DMXInput *dmx = static_cast<DMXInput *>(context);
+
+    if (!dmx)
+    {
+      USER_PRINTLN("DMX: Error: no context in rdmPersonalityChangedCb");
+      return;
+    }
+
+    if (dmx->wifiState == 1 && apBehavior != AP_BEHAVIOR_ALWAYS)
+    {
+      // reset ssid to default
+      WLED_SET_AP_SSID();
+
+      //disable wifi client
+      strcpy(clientSSID, "");
+
+      USER_PRINTLN("wifi data:");
+      USER_PRINTLN(apSSID); 
+      USER_PRINTLN(apPass); 
+      apBehavior = AP_BEHAVIOR_ALWAYS;
+      doSerializeConfig = true;
+      USER_PRINTF("Wifi enabled via RDM\n");
+    }
+    else if (dmx->wifiState == 0 && apBehavior != AP_BEHAVIOR_BUTTON_ONLY)
+    {
+      apBehavior = AP_BEHAVIOR_BUTTON_ONLY;
+      doSerializeConfig = true;
+      USER_PRINTF("Wifi disabled via RDM\n");
+    }
+  }
+
+  // dont need to do anything in here
+}
+
 void rdmPersonalityChangedCb(dmx_port_t dmxPort, const rdm_header_t *header,
                              void *context)
 {
@@ -126,6 +175,22 @@ bool DMXInput::installDriver()
 
   rdm_register_dmx_start_address(inputPortNum, rdmAddressChangedCb, this);
   rdm_register_dmx_personality(inputPortNum, rdmPersonalityChangedCb, this);
+
+  // wifi enable parameter
+  rdm_pid_description_t desc;
+  desc.pid = RDM_PID_MANUFACTURER_SPECIFIC_BEGIN;
+  desc.pdl_size = 0x1;
+  desc.data_type = RDM_DS_UNSIGNED_BYTE;
+  desc.cc = RDM_CC_GET_SET;
+  desc.unit = RDM_UNITS_NONE;
+  desc.prefix = RDM_PREFIX_NONE;
+  desc.min_value = 0;
+  desc.max_value = 1;
+  desc.default_value = wifiState;
+  strlcpy(desc.description, "Wifi Enabled", strlen("Wifi Enabled") + 1);
+  const char *param_str = "b$";
+  rdm_register_manufacturer_specific_simple(DMX_NUM_2, desc, &wifiState, param_str, wifiStateChangedCb, this);
+
   initialized = true;
   return true;
 }
@@ -141,6 +206,15 @@ void DMXInput::init(uint8_t rxPin, uint8_t txPin, uint8_t enPin, uint8_t inputPo
   //    return;
   //  }
 #endif
+
+  if (apBehavior == AP_BEHAVIOR_BUTTON_ONLY)
+  {
+    wifiState = 0;
+  }
+  else
+  {
+    wifiState = 1;
+  }
 
   if (inputPortNum < 3 && inputPortNum > 0)
   {
@@ -209,7 +283,7 @@ void DMXInput::updateInternal()
       {
         const std::lock_guard<std::mutex> lock(dmxDataLock);
         dmx_read(inputPortNum, dmxdata, packet.size);
-        //forward dimmer channel directly
+        // forward dimmer channel directly
         setBlinderBrightness(dmxdata[DMXAddress]);
       }
     }
@@ -299,6 +373,8 @@ void DMXInput::checkAndUpdateConfig()
     DEBUG_PRINTF("DMX address has changed from %d to %d\n", currentAddr, DMXAddress);
     dmx_set_start_address(inputPortNum, DMXAddress);
   }
+
+  // TODO somehow figure if that the webinterface changed the wifi state
 }
 
 #endif
