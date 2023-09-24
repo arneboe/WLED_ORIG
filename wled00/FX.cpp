@@ -409,6 +409,15 @@ uint16_t mode_scan(void) {
 static const char _data_FX_MODE_SCAN[] PROGMEM = "Scan@!,# of dots,,,,,Overlay;!,!,!;!";
 
 
+uint16_t mode_not_connected(void) {
+  for (int j = 0; j < 2; j++) {
+    SEGMENT.setPixelColor(j, 255, 0, 0, 0);
+  }
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_NOT_CONNECTED[] PROGMEM = "NC@!,# of dots,,,,,Overlay;!,!,!;!";
+
+
 /*
  * Runs two pixel back and forth in opposite directions.
  */
@@ -8254,6 +8263,7 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_2DWAVINGCELL, &mode_2Dwavingcell, _data_FX_MODE_2DWAVINGCELL);
 
   addEffect(FX_MODE_2DAKEMI, &mode_2DAkemi, _data_FX_MODE_2DAKEMI); // audio
+  addEffect(FX_MODE_NOT_CONNECTED, &mode_not_connected, _data_FX_MODE_NOT_CONNECTED); // not connected animation
 #endif // WLED_DISABLE_2D
 
 }
