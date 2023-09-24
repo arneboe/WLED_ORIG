@@ -28,8 +28,6 @@ private:
    */
   void checkAndUpdateConfig();
 
-  /// overrides everything and turns on all leds
-  void turnOnAllLeds();
 
   /// installs the dmx driver
   /// @return false on fail
@@ -61,6 +59,9 @@ private:
 
   //contains the wifi state for rdm
   uint8_t wifiState;
+
+  //the last effect that was set via dmx
+  uint8_t lastEffectId = 255;
 
   /// is written to by the dmx receive task.
   // +1 because we shift it later and need to avoid out of bounds access

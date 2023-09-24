@@ -1605,8 +1605,23 @@ void WS2812FX::waitUntilIdle(void) {
 #endif
 }
 
+void WS2812FX::resetTime(uint32_t time)
+{
+  currentTime = time;
+}
+
+uint32_t WS2812FX::getCurrentTime()
+{
+  static uint32_t lastMillis = millis();
+  const uint32_t currentMillis = millis(); // Be aware, millis() rolls over every 49 days
+  const uint32_t diff = currentMillis - lastMillis;
+  lastMillis = currentMillis;
+  currentTime += diff;
+  return currentTime;
+}
+
 void WS2812FX::service() {
-  unsigned long nowUp = millis(); // Be aware, millis() rolls over every 49 days // WLEDMM avoid losing precision
+  const uint32_t nowUp = getCurrentTime();
   now = nowUp + timebase;
   #if defined(ARDUINO_ARCH_ESP32) && defined(WLEDMM_FASTPATH)
     if ((_frametime > 2) && (_frametime < 32) && (nowUp - _lastShow) < (_frametime/2)) return;  // WLEDMM experimental - stabilizes frametimes but increases CPU load
