@@ -410,9 +410,10 @@ static const char _data_FX_MODE_SCAN[] PROGMEM = "Scan@!,# of dots,,,,,Overlay;!
 
 
 uint16_t mode_not_connected(void) {
-  for (int j = 0; j < 2; j++) {
-    SEGMENT.setPixelColor(j, 255, 0, 0, 0);
-  }
+
+  SEGMENT.setPixelColor(0, 255, 0, 0, 0);
+  SEGMENT.setPixelColor(SEGLEN-1, 255, 0, 0, 0);
+
   return FRAMETIME;
 }
 static const char _data_FX_MODE_NOT_CONNECTED[] PROGMEM = "NC@!,# of dots,,,,,Overlay;!,!,!;!";
