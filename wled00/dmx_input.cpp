@@ -285,6 +285,15 @@ void DMXInput::updateInternal()
         dmx_read(inputPortNum, dmxdata, packet.size);
         // forward dimmer channel directly
         setBlinderBrightness(dmxdata[DMXAddress]);
+
+        // reset the effect timebase when the effect changes.
+        // This kinda synchronizes the fixtures
+        const uint8_t currentEffect = dmxdata[DMXAddress + 2];
+        if (currentEffect != lastEffectId)
+        {
+          lastEffectId = currentEffect;
+          strip.resetTime(1);
+        }
       }
     }
     else
@@ -302,7 +311,22 @@ void DMXInput::update()
 {
   if (identify)
   {
-    turnOnAllLeds();
+    // white pulsing
+    const std::lock_guard<std::mutex> lock(dmxDataLock);
+    const uint16_t addr = DMXAddress + 1;
+    dmxdata[addr] = 255;     // bri
+    dmxdata[addr + 1] = 2;   // effect id
+    dmxdata[addr + 2] = 255; // effect speed
+    dmxdata[addr + 6] = 255; // r
+    dmxdata[addr + 7] = 255; // g
+    dmxdata[addr + 8] = 255; // b
+    dmxdata[addr + 9] = 0;
+    dmxdata[addr + 10] = 0;
+    dmxdata[addr + 11] = 0;
+    dmxdata[addr + 12] = 0;
+    dmxdata[addr + 13] = 0;
+    dmxdata[addr + 14] = 0;
+    handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
   }
   else if (connected)
   {
@@ -312,19 +336,20 @@ void DMXInput::update()
     //          We have to ensure that that does not happen
     handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
   }
+  else
+  {
+    //not connected animation
+    const std::lock_guard<std::mutex> lock(dmxDataLock);
+    const uint16_t addr = DMXAddress + 1;
+    dmxdata[addr] = 255;     // bri
+    dmxdata[addr + 1] = 188;   // effect id
+    //the not-connected effect ignores all other values
+
+    handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
+  }
+  handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
 }
 
-void DMXInput::turnOnAllLeds()
-{
-  // TODO not sure if this is the correct way?
-  const uint16_t numPixels = strip.getLengthTotal();
-  for (uint16_t i = 0; i < numPixels; ++i)
-  {
-    strip.setPixelColor(i, 255, 255, 255, 255);
-  }
-  strip.setBrightness(255, true);
-  strip.show();
-}
 
 void DMXInput::disable()
 {
