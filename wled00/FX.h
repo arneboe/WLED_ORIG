@@ -334,8 +334,9 @@ void strip_wait_until_idle(String whoCalledMe); // WLEDMM implemented in FX_fcn.
 #define FX_MODE_ROCKTAVES              185
 #define FX_MODE_2DAKEMI                186
 #define FX_MODE_ARTIFX                 187 //WLEDMM ARTIFX
+#define FX_MODE_NOT_CONNECTED          188
 
-#define MODE_COUNT                     188
+#define MODE_COUNT                     189
 
 typedef enum mapping1D2D {
   M12_Pixels = 0,
@@ -777,6 +778,8 @@ class WS2812FX {  // 96 bytes
 
     static WS2812FX* getInstance(void) { return instance; }
 
+    uint32_t getCurrentTime();
+
     void
 #ifdef WLED_DEBUG
       printSize(),
@@ -784,6 +787,7 @@ class WS2812FX {  // 96 bytes
       finalizeInit(),
       waitUntilIdle(void),   // WLEDMM
       service(void),
+      resetTime(uint32_t time),
       setMode(uint8_t segid, uint8_t m),
       setColor(uint8_t slot, uint32_t c),
       setCCT(uint16_t k),
@@ -882,6 +886,9 @@ class WS2812FX {  // 96 bytes
   // 2D support (panels)
     bool
       isMatrix;
+
+    // is used in resetTime to reset the time.
+    uint32_t currentTime;
 
 #ifndef WLED_DISABLE_2D
     #define WLED_MAX_PANELS 64
