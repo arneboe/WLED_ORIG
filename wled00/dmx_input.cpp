@@ -106,10 +106,10 @@ static dmx_config_t createConfig()
   config.dmx_start_address = DMXAddress; // TODO split between input and output address
   config.model_id = 0;
   config.product_category = RDM_PRODUCT_CATEGORY_FIXTURE;
-  config.software_version_id = VERSION;
-  strcpy(config.device_label, "WLED_MM");
+  config.software_version_id = 6;
+  strcpy(config.device_label, "LAG_BLINDER");
 
-  const std::string versionString = "WLED_V" + std::to_string(VERSION);
+  const std::string versionString = "BLIND_V6";
   strncpy(config.software_version_label, versionString.c_str(), 32);
   config.software_version_label[32] = '\0'; // zero termination in case versionString string was longer than 32 chars
 
@@ -309,11 +309,12 @@ void DMXInput::updateInternal()
 
 void DMXInput::update()
 {
+  const uint16_t addr = DMXAddress + 1;
+
   if (identify)
   {
     // white pulsing
     const std::lock_guard<std::mutex> lock(dmxDataLock);
-    const uint16_t addr = DMXAddress + 1;
     dmxdata[addr] = 255;     // bri
     dmxdata[addr + 1] = 2;   // effect id
     dmxdata[addr + 2] = 255; // effect speed
@@ -328,6 +329,12 @@ void DMXInput::update()
     dmxdata[addr + 14] = 0;
     handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
   }
+  else if(oldIdentify && !identify)
+  {
+    //identify was turned off, disable brightness. Otherwise it just stays on
+    //while the rdm tester is connected
+    dmxdata[addr] = 0;
+  }
   else if (connected)
   {
     const std::lock_guard<std::mutex> lock(dmxDataLock);
@@ -340,14 +347,14 @@ void DMXInput::update()
   {
     //not connected animation
     const std::lock_guard<std::mutex> lock(dmxDataLock);
-    const uint16_t addr = DMXAddress + 1;
     dmxdata[addr] = 255;     // bri
     dmxdata[addr + 1] = 188;   // effect id
     //the not-connected effect ignores all other values
 
     handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
   }
-  handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
+
+  oldIdentify = identify;
 }
 
 

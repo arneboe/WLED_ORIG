@@ -71,6 +71,7 @@ private:
   /// True if dmx is currently connected
   std::atomic<bool> connected{false};
   std::atomic<bool> identify{false};
+  bool oldIdentify{false}; //used to detect if identify changed
   /// Timestamp of the last time a dmx frame was received
   unsigned long lastUpdate = 0;
 
