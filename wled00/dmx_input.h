@@ -12,8 +12,6 @@
 class DMXInput
 {
 public:
-  static constexpr uint8_t numCustomChannels = 2;
-
   void init(uint8_t rxPin, uint8_t txPin, uint8_t enPin, uint8_t inputPortNum);
   void update();
 
@@ -29,6 +27,7 @@ private:
    * Checks if the global dmx config has changed and updates the changes in rdm
    */
   void checkAndUpdateConfig();
+
 
   /// installs the dmx driver
   /// @return false on fail
@@ -58,15 +57,15 @@ private:
   uint8_t txPin = 255;
   uint8_t enPin = 255;
 
-  // contains the wifi state for rdm
+  //contains the wifi state for rdm
   uint8_t wifiState;
 
-  // the last effect that was set via dmx
+  //the last effect that was set via dmx
   uint8_t lastEffectId = 255;
 
   /// is written to by the dmx receive task.
-  // +numCustomChannels because we shift it later and need to avoid out of bounds access
-  byte dmxdata[DMX_PACKET_SIZE + numCustomChannels];
+  // +1 because we shift it later and need to avoid out of bounds access
+  byte dmxdata[DMX_PACKET_SIZE + 1]; // TODO add locking somehow? maybe double buffer?
   /// True once the dmx input has been initialized successfully
   bool initialized = false; // true once init finished successfully
   /// True if dmx is currently connected

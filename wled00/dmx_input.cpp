@@ -38,12 +38,12 @@ void wifiStateChangedCb(dmx_port_t dmxPort, const rdm_header_t *header,
       // reset ssid to default
       WLED_SET_AP_SSID();
 
-      // disable wifi client
+      //disable wifi client
       strcpy(clientSSID, "");
 
       USER_PRINTLN("wifi data:");
-      USER_PRINTLN(apSSID);
-      USER_PRINTLN(apPass);
+      USER_PRINTLN(apSSID); 
+      USER_PRINTLN(apPass); 
       apBehavior = AP_BEHAVIOR_ALWAYS;
       doSerializeConfig = true;
       USER_PRINTF("Wifi enabled via RDM\n");
@@ -107,32 +107,32 @@ static dmx_config_t createConfig()
   config.model_id = 0;
   config.product_category = RDM_PRODUCT_CATEGORY_FIXTURE;
   config.software_version_id = VERSION;
-  strcpy(config.device_label, "BLINDER_V5");
+  strcpy(config.device_label, "WLED_MM");
 
-  const std::string versionString = "WLED_BLINDER_V5";
+  const std::string versionString = "WLED_V" + std::to_string(VERSION);
   strncpy(config.software_version_label, versionString.c_str(), 32);
   config.software_version_label[32] = '\0'; // zero termination in case versionString string was longer than 32 chars
 
   config.personalities[0].description = "SINGLE_RGB";
-  config.personalities[0].footprint = 3 + DMXInput::numCustomChannels;
+  config.personalities[0].footprint = 4;
   config.personalities[1].description = "SINGLE_DRGB";
-  config.personalities[1].footprint = 4 + DMXInput::numCustomChannels;
+  config.personalities[1].footprint = 6;
   config.personalities[2].description = "EFFECT";
-  config.personalities[2].footprint = 15 + DMXInput::numCustomChannels;
+  config.personalities[2].footprint = 16;
   config.personalities[3].description = "MULTIPLE_RGB";
-  config.personalities[3].footprint = std::min(512, int(strip.getLengthTotal()) * 3 + DMXInput::numCustomChannels);
+  config.personalities[3].footprint = std::min(512, int(strip.getLengthTotal()) * 3 + 1);
   config.personalities[4].description = "MULTIPLE_DRGB";
-  config.personalities[4].footprint = std::min(512, int(strip.getLengthTotal()) * 3 + 1 + DMXInput::numCustomChannels);
+  config.personalities[4].footprint = std::min(512, int(strip.getLengthTotal()) * 3 + 2);
   config.personalities[5].description = "MULTIPLE_RGBW";
-  config.personalities[5].footprint = std::min(512, int(strip.getLengthTotal()) * 4 + DMXInput::numCustomChannels);
+  config.personalities[5].footprint = std::min(512, int(strip.getLengthTotal()) * 4 + 1);
   config.personalities[6].description = "EFFECT_W";
-  config.personalities[6].footprint = 18 + DMXInput::numCustomChannels;
+  config.personalities[6].footprint = 19;
   config.personalities[7].description = "EFFECT_SEGMENT";
-  config.personalities[7].footprint = std::min(512, strip.getSegmentsNum() * 15 + DMXInput::numCustomChannels);
+  config.personalities[7].footprint = std::min(512, strip.getSegmentsNum() * 15 + 1);
   config.personalities[8].description = "EFFECT_SEGMENT_W";
-  config.personalities[8].footprint = std::min(512, strip.getSegmentsNum() * 18 + DMXInput::numCustomChannels);
+  config.personalities[8].footprint = std::min(512, strip.getSegmentsNum() * 18 + 1);
   config.personalities[9].description = "PRESET";
-  config.personalities[9].footprint = 2 + DMXInput::numCustomChannels;
+  config.personalities[9].footprint = 2;
 
   config.personality_count = 10;
   // rdm personalities are numbered from 1, thus we can just set the DMXMode directly.
@@ -287,9 +287,8 @@ void DMXInput::updateInternal()
         setBlinderBrightness(dmxdata[DMXAddress]);
 
         // reset the effect timebase when the effect changes.
-        // This kinda synchronizes the fixtures.
-        // Need to do this on receive because handleDmxData will happen later in a differen thread.
-        const uint8_t currentEffect = dmxdata[DMXAddress + numCustomChannels];
+        // This kinda synchronizes the fixtures
+        const uint8_t currentEffect = dmxdata[DMXAddress + 2];
         if (currentEffect != lastEffectId)
         {
           lastEffectId = currentEffect;
@@ -314,7 +313,7 @@ void DMXInput::update()
   {
     // white pulsing
     const std::lock_guard<std::mutex> lock(dmxDataLock);
-    const uint16_t addr = DMXAddress + numCustomChannels;
+    const uint16_t addr = DMXAddress + 1;
     dmxdata[addr] = 255;     // bri
     dmxdata[addr + 1] = 2;   // effect id
     dmxdata[addr + 2] = 255; // effect speed
@@ -327,30 +326,30 @@ void DMXInput::update()
     dmxdata[addr + 12] = 0;
     dmxdata[addr + 13] = 0;
     dmxdata[addr + 14] = 0;
-    handleDMXData(1, 512, dmxdata + numCustomChannels, REALTIME_MODE_DMX, 0);
+    handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
   }
   else if (connected)
   {
     const std::lock_guard<std::mutex> lock(dmxDataLock);
-    // blinder: we move dmxdata numCustomChannels forward. This way we hack the blinder/strobe channel infront of the
+    // blinder: we move dmxdata one byte forward. This way we hack the blinder channel infront of the
     //          dmx data but we can keep the dmx addr. This could lead to out of bounds access.
     //          We have to ensure that that does not happen
-
-
-    handleDMXData(1, 512, dmxdata + numCustomChannels, REALTIME_MODE_DMX, 0, dmxdata[DMXAddress + 1]);
+    handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
   }
   else
   {
-    // not connected animation
+    //not connected animation
     const std::lock_guard<std::mutex> lock(dmxDataLock);
-    const uint16_t addr = DMXAddress + numCustomChannels;
+    const uint16_t addr = DMXAddress + 1;
     dmxdata[addr] = 255;     // bri
-    dmxdata[addr + 1] = 188; // effect id
-    // the not-connected effect ignores all other values
+    dmxdata[addr + 1] = 188;   // effect id
+    //the not-connected effect ignores all other values
 
-    handleDMXData(1, 512, dmxdata + numCustomChannels, REALTIME_MODE_DMX, 0);
+    handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
   }
+  handleDMXData(1, 512, dmxdata + 1, REALTIME_MODE_DMX, 0);
 }
+
 
 void DMXInput::disable()
 {

@@ -114,67 +114,7 @@ void handleE131Packet(e131_packet_t* p, IPAddress clientIP, byte protocol){
   handleDMXData(uni, dmxChannels, e131_data, mde, previousUniverses);
 }
 
-void setBrightness(uint8_t brightness, uint8_t strobe)
-{
-    // how long the strobe-on flash is
-    static const float strobeOnTime = 0.008f;
-    const float currentTime = millis() / 1000.0f;
-    static float lastTime = currentTime; //<< static!!!
-    static bool strobeOn = false;
-
-    bool changed = false;
-
-    if (strobe > 0)
-    {
-        if (strobeOn)
-        {
-            const float timeSinceOn = currentTime - lastTime;
-            if (timeSinceOn > strobeOnTime)
-            {
-                strobeOn = false;
-                bri = 0;
-                strip.setBrightness(0, true);
-                lastTime = currentTime;
-                changed = true;
-            }
-        }
-        else
-        {
-            // strobe is always at least 1 when we are in this case
-            const float strobeOffTime = (255 - strobe) * 0.01f;
-            const float timeSinceOff = currentTime - lastTime;
-            if (timeSinceOff > strobeOffTime)
-            {
-                strobeOn = true;
-                bri = brightness;
-                strip.setBrightness(brightness, true);
-                lastTime = currentTime;
-                changed = true;
-            }
-        }
-    }
-    else
-    {
-        if (brightness != strip.getBrightness())
-        {
-            bri = brightness; // need to set the global bri aswell for wled internals to work
-            strip.setBrightness(brightness, true);
-            changed = true;
-        }
-    }
-    if(changed)
-    {
-      fadeTransition = false;
-      transitionDelay = 0;
-      transitionDelayTemp = 0;
-      stateUpdated(CALL_MODE_NOTIFICATION);
-    }
-}
-
-
-
-void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8_t mde, uint8_t previousUniverses,
-                   uint8_t strobe) {
+void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8_t mde, uint8_t previousUniverses) {
   #ifdef WLED_ENABLE_DMX
   // does not act on out-of-order packets yet
   if (e131ProxyUniverse > 0 && uni == e131ProxyUniverse) {
@@ -216,8 +156,6 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
 
       if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) return;
 
-      setBrightness(255, strobe);
-
       wChannel = (availDMXLen > 3) ? e131_data[dataOffset+3] : 0;
       for (uint16_t i = 0; i < totalLen; i++)
         setRealtimePixel(i, e131_data[dataOffset+0], e131_data[dataOffset+1], e131_data[dataOffset+2], wChannel);
@@ -231,7 +169,10 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
       if (realtimeOverride && !(realtimeMode && useMainSegmentOnly)) return;
       wChannel = (availDMXLen > 4) ? e131_data[dataOffset+4] : 0;
 
-      setBrightness(e131_data[dataOffset+0], strobe);
+      if (bri != e131_data[dataOffset+0]) {
+        bri = e131_data[dataOffset+0];
+        strip.setBrightness(bri, true);
+      }
 
       for (uint16_t i = 0; i < totalLen; i++)
         setRealtimePixel(i, e131_data[dataOffset+1], e131_data[dataOffset+2], e131_data[dataOffset+3], wChannel);
@@ -253,7 +194,12 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
           applyPreset(dmxValPreset, CALL_MODE_NOTIFICATION);
         }
 
-        setBrightness(e131_data[dataOffset+0], strobe);
+        // only change brightness if value changed
+        if (bri != e131_data[dataOffset]) {                                        
+          bri = e131_data[dataOffset];
+          strip.setBrightness(scaledBri(bri), false);
+          stateUpdated(CALL_MODE_WS_SEND);
+        }
         return;
         break;
       }
@@ -307,10 +253,12 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
 
           // Set segment opacity or global brightness
           if (isSegmentMode) {
-            //TODO strobe does not work in segment mode!
             if (e131_data[dataOffset] != seg.opacity) seg.setOpacity(e131_data[dataOffset]);
           } else if ( id == strip.getSegmentsNum()-1 ) {
-            setBrightness(e131_data[dataOffset+0], strobe);
+            if (bri != e131_data[dataOffset]) {
+              bri = e131_data[dataOffset];
+              strip.setBrightness(bri, true);
+            }
           }
         }
         return;
@@ -360,14 +308,11 @@ void handleDMXData(uint16_t uni, uint16_t dmxChannels, uint8_t* e131_data, uint8
         }
 
         if (DMXMode == DMX_MODE_MULTIPLE_DRGB && previousUniverses == 0) {
-          setBrightness(e131_data[dataOffset+0], strobe);
+          if (bri != stripBrightness) {
+            bri = stripBrightness;
+            strip.setBrightness(bri, true);
+          }
         }
-        else if(DMXMode == DMX_MODE_MULTIPLE_RGB || DMXMode == DMX_MODE_MULTIPLE_RGBW)
-        {
-          setBrightness(255, strobe);
-        }
-
-        //TODO strobe does not work in rgbw and rgb modes
 
         if (!is4Chan) {
           for (uint16_t i = previousLeds; i < ledsTotal; i++) {
